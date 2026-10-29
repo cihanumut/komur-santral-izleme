@@ -1,0 +1,1649 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kömür Santralleri Emisyon ve Üretim İzleme</title>
+<meta name="description" content="Türkiye kömür santrallerinin EPİAŞ saatlik üretim verisiyle SCADA tarzı izleme paneli.">
+<style>
+  :root {
+    --font-anthropic-sans: "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
+    --font-anthropic-serif: Georgia, "Times New Roman", serif;
+    --color-bg: #f7f7f5; --color-panel: #ffffff; --color-fg: #1d1f22; --color-fg-muted: #5f646b;
+    --color-border-line: #e2e2dc; --color-ok: #2e7d4f; --color-warn: #b36b00; --color-bad: #c0392b;
+    --cds-text-secondary: #5f646b; --cds-surface-popover: #ffffff; --cds-border: #d8d8d2;
+    --cds-shadow-popover: 0 4px 16px rgba(0,0,0,.12);
+    --cds-chart-grid: #ececE6; --cds-chart-axis: #b9bbb4; --cds-chart-muted: #c4c4bb;
+    --cds-chart-status-critical: #d64534; --cds-chart-reference: #8a8d93;
+    --cds-gap-xs: 4px; --cds-gap-sm: 8px; --cds-gap-md: 16px; --cds-gap-lg: 24px; --cds-gap-xl: 32px;
+    --cds-pad-xs: 4px; --cds-pad-sm: 8px; --cds-pad-md: 12px; --cds-pad-lg: 20px;
+    --cds-radius: 8px; --cds-font-weight-medium: 600; --cds-dur-slow: 300ms;
+    --cds-font-size-caption: 12.5px; --cds-font-size-body: 14.5px; --cds-font-size-heading: 17px; --cds-font-size-title: 28px;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --color-bg: #17181a; --color-panel: #1f2023; --color-fg: #ececea; --color-fg-muted: #a3a6ab;
+      --color-border-line: #33353a; --color-ok: #5cc28a; --color-warn: #e0a24a; --color-bad: #ef6b5d;
+      --cds-text-secondary: #a3a6ab; --cds-surface-popover: #26282c; --cds-border: #3a3d42;
+      --cds-shadow-popover: 0 4px 16px rgba(0,0,0,.45);
+      --cds-chart-grid: #2c2e32; --cds-chart-axis: #55585e; --cds-chart-muted: #55585e;
+      --cds-chart-status-critical: #ef6b5d; --cds-chart-reference: #8a8d93;
+      color-scheme: dark;
+    }
+  }
+  [hidden] { display: none !important; }
+  html, body { margin: 0; background: var(--color-bg); color: var(--color-fg); font-family: var(--font-anthropic-sans); font-size: var(--cds-font-size-body); }
+  #dash-root { max-width: 1200px; margin: 0 auto; padding: 24px max(16px, 3vw) 48px; }
+  .site-alt { margin-top: 32px; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+  .site-alt a { color: inherit; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+<script src="veri.js"></script>
+<script src="dash-shim.js"></script>
+</head>
+<body>
+<div id="dash-root">
+<style>
+  .sc { display: flex; flex-direction: column; gap: var(--cds-gap-xl); font-family: var(--font-anthropic-sans); }
+  .sc-head { display: flex; flex-direction: column; gap: var(--cds-gap-sm); }
+  .sc-title { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-title); margin: 0; text-wrap: balance; }
+  .sc-lead { margin: 0; color: var(--color-fg-muted); max-width: 72ch; line-height: 1.5; }
+  .sc .sc-lead b, .sc .sc-note b { color: var(--color-fg); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .sc-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr)); gap: var(--cds-gap-md); }
+  .sc-tile { background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-md) var(--cds-pad-lg); display: flex; flex-direction: column; gap: var(--cds-gap-xs); min-width: 0; }
+  .sc-label { font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); letter-spacing: .02em; }
+  .sc-big { font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-title); font-variant-numeric: tabular-nums; line-height: 1.15; }
+  .sc .sc-big b { font-weight: 400; }
+  .sc-unit { font-family: var(--font-anthropic-sans); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); margin-left: .25em; }
+  .sc-card { background: var(--color-panel); border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-lg); display: flex; flex-direction: column; gap: var(--cds-gap-md); min-width: 0; }
+  .sc-card h2, .sc-section h2 { margin: 0; font-size: var(--cds-font-size-heading); font-weight: var(--cds-font-weight-medium); }
+  .sc-note { margin: 0; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); line-height: 1.5; max-width: 80ch; }
+  .sc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: var(--cds-gap-md); }
+  .sc-section { display: flex; flex-direction: column; gap: var(--cds-gap-md); min-width: 0; }
+
+  .sc-live { gap: var(--cds-gap-lg); }
+  .sc-live-top { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--cds-gap-md); }
+  .sc-clock { display: flex; align-items: baseline; gap: var(--cds-gap-xs); font-variant-numeric: tabular-nums; }
+  .sc-clock .sc-big { font-size: var(--cds-font-size-heading); }
+  .sc-pills { display: flex; flex-wrap: wrap; gap: var(--cds-gap-xs); }
+  .sc-pill { display: inline-flex; align-items: center; gap: .4em; font-size: var(--cds-font-size-caption); padding: .2em .7em; border-radius: 999px; border: 1px solid var(--color-border-line); }
+  .sc-pill::before { content: ""; width: .5rem; height: .5rem; border-radius: 50%; background: currentColor; }
+  .sc-pill.ok { color: var(--color-ok); }
+  .sc-pill.warn { color: var(--color-warn); }
+  .sc-pill.bad { color: var(--color-bad); }
+  .sc-controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--cds-gap-sm); }
+  .sc-btn { font: inherit; font-size: var(--cds-font-size-caption); padding: .45em .9em; border-radius: var(--cds-radius); border: 1px solid var(--color-border-line); background: var(--color-bg); color: var(--color-fg); cursor: pointer; }
+  .sc-btn:hover { border-color: var(--color-fg-muted); }
+  .sc-btn:focus-visible, .sc-select:focus-visible, .sc-range:focus-visible { outline: 2px solid var(--color-fg); outline-offset: 2px; }
+  .sc-select { font: inherit; font-size: var(--cds-font-size-caption); padding: .4em .5em; border-radius: var(--cds-radius); border: 1px solid var(--color-border-line); background: var(--color-bg); color: var(--color-fg); }
+  .sc-range { flex: 1 1 12rem; min-width: 0; accent-color: var(--color-fg-muted); }
+  .sc-gauges { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr)); gap: var(--cds-gap-sm); }
+  .sc-gauge { border: 1px solid var(--color-border-line); border-radius: var(--cds-radius); padding: var(--cds-pad-sm) var(--cds-pad-md); display: flex; flex-direction: column; gap: 2px; background: var(--color-bg); transition: border-color var(--cds-dur-slow); }
+  .sc-gauge .sc-big { font-size: var(--cds-font-size-heading); }
+  .sc-gauge.is-alarm { border-color: var(--cds-chart-status-critical); }
+  .sc-gauge.is-alarm .sc-big { color: var(--color-bad); }
+  .sc-live-body { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr)); gap: var(--cds-gap-lg); }
+  .sc-log { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; font-size: var(--cds-font-size-caption); font-variant-numeric: tabular-nums; max-height: 15rem; overflow: auto; }
+  .sc-log li { display: flex; flex-wrap: wrap; gap: 0 var(--cds-gap-sm); padding: .35em 0; border-bottom: 1px solid var(--color-border-line); }
+  .sc-log .t { color: var(--color-fg-muted); min-width: 8.5em; }
+  .sc-log .bad { color: var(--color-bad); }
+  .sc-log .ok { color: var(--color-ok); }
+  .sc-log .warn { color: var(--color-warn); }
+
+  .sc-chart { position: relative; min-height: 220px; width: 100%; }
+  .sc-chart.sc-mini { min-height: 250px; }
+  .sc-chart svg { display: block; overflow: visible; }
+  .sc-tip { position: absolute; pointer-events: none; background: var(--cds-surface-popover); border: 1px solid var(--cds-border); border-radius: var(--cds-radius); box-shadow: var(--cds-shadow-popover); padding: var(--cds-pad-xs) var(--cds-pad-sm); font-size: var(--cds-font-size-caption); white-space: nowrap; font-variant-numeric: tabular-nums; z-index: 2; }
+  .sc-tip .d { color: var(--cds-text-secondary); }
+  .sc-tip .sw { display: inline-block; width: .6rem; height: .6rem; border-radius: 2px; margin-right: .4em; vertical-align: -.05em; }
+  .sc-fail { display: flex; align-items: center; justify-content: center; gap: .5em; min-height: inherit; height: 100%; font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); }
+  .sc-fail::before { content: ""; width: .375rem; height: .375rem; border-radius: 50%; background: var(--color-bad); }
+
+  .sc-tablewrap { overflow: auto; max-height: 30rem; }
+  .sc-table { width: 100%; border-collapse: collapse; font-size: var(--cds-font-size-caption); font-variant-numeric: tabular-nums; }
+  .sc-table th { position: sticky; top: 0; background: var(--color-panel); text-align: right; font-weight: var(--cds-font-weight-medium); color: var(--color-fg-muted); padding: .5em .6em; border-bottom: 1px solid var(--color-border-line); white-space: nowrap; }
+  .sc-table td { text-align: right; padding: .5em .6em; border-bottom: 1px solid var(--color-border-line); white-space: nowrap; }
+  .sc-table th:first-child, .sc-table td:first-child { text-align: left; }
+  .sc-table td.is-bad { color: var(--color-bad); }
+
+
+  .sc-subtitle { margin: 0; font-family: var(--font-anthropic-serif); font-weight: 400; font-size: var(--cds-font-size-heading); }
+  .sc-tabs { display: flex; flex-wrap: wrap; gap: var(--cds-gap-xs); border-bottom: 1px solid var(--color-border-line); }
+  .sc-tab { font: inherit; font-size: var(--cds-font-size-body); padding: .5em .9em; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; background: none; color: var(--color-fg-muted); cursor: pointer; }
+  .sc-tab[aria-selected="true"] { color: var(--color-fg); border-bottom-color: var(--color-fg); }
+  .sc-tab:focus-visible { outline: 2px solid var(--color-fg); outline-offset: 2px; }
+  .sc-chart.sc-tall { min-height: 300px; }
+  .sc-legend { display: flex; flex-wrap: wrap; gap: var(--cds-gap-xs) var(--cds-gap-md); font-size: var(--cds-font-size-caption); color: var(--color-fg-muted); min-height: 1.2em; }
+  .sc-legend span { display: inline-flex; align-items: center; gap: .35em; }
+  .sc-legend i { width: .65rem; height: .65rem; border-radius: 2px; display: inline-block; }
+  .sc .sc-delta.is-up { color: var(--color-bad); }
+  .sc .sc-delta.is-down { color: var(--color-ok); }
+
+
+  .sc .ts-filo tbody tr { cursor: pointer; }
+  .sc .ts-filo tbody tr:hover td { background: color-mix(in srgb, var(--color-fg) 4%, transparent); }
+  .sc .ts-filo tbody tr.is-picked td { background: color-mix(in srgb, var(--color-fg) 8%, transparent); }
+  .sc .ts-filo td.ts-barcell { background-image: linear-gradient(to left, color-mix(in srgb, var(--color-fg-muted) 22%, transparent) var(--w), transparent var(--w)); }
+  [data-dash-source-state=empty] { color: transparent; }
+  [data-dash-source-state=refreshing] { opacity: .5; transition: opacity var(--cds-dur-slow); }
+</style>
+
+<div class="sc">
+  <header class="sc-head">
+    <h1 class="sc-title">Kömürden elektrik ve emisyon izleme</h1>
+    <div class="sc-tabs" role="tablist" aria-label="Görünüm">
+      <button class="sc-tab" type="button" role="tab" id="sekme-turkiye" data-tab="turkiye" aria-selected="true">Türkiye geneli</button>
+      <button class="sc-tab" type="button" role="tab" id="sekme-santral" data-tab="santral" aria-selected="false">Santral izleme (EPİAŞ)</button>
+      <button class="sc-tab" type="button" role="tab" id="sekme-emisyon" data-tab="emisyon" aria-selected="false">Emisyon ölçümü örneği (ABD)</button>
+    </div>
+  </header>
+
+  <section class="sc" data-page="turkiye" id="turkiye">
+    <div class="sc-head">
+      <p class="sc-lead">Türkiye'de kömürden elektrik üretimi ve elektrik sektörünün CO₂ salımı, aylık. Son 12 ayda (<b data-draw="tr-donem" data-source="tr_son12" data-field="donem">—</b>) kömürden <b data-draw="tr-kpi" data-source="tr_son12" data-field="komur_twh" data-row="0">—</b> TWh elektrik üretildi; bu, toplam üretimin <b data-draw="tr-kpi" data-source="tr_son12" data-field="komur_pay" data-row="0">—</b> kadarı. Elektrik sektörü CO₂ salımının <b data-draw="tr-kpi" data-source="tr_son12" data-field="co2_pay" data-row="0">—</b> kadarı kömürden geldi.</p>
+    </div>
+
+    <div class="sc-tiles">
+      <div class="sc-tile">
+        <span class="sc-label">Kömürden üretim, son 12 ay</span>
+        <span class="sc-big"><b data-draw="tr-kpi" data-source="tr_son12" data-field="komur_twh" data-row="0">—</b><span class="sc-unit">TWh</span></span>
+        <span class="sc-label"><b class="sc-delta" data-draw="tr-kpi" data-source="tr_son12" data-field="komur_degisim" data-row="0">—</b> önceki 12 aya göre</span>
+      </div>
+      <div class="sc-tile">
+        <span class="sc-label">Kömürün üretimdeki payı, son 12 ay</span>
+        <span class="sc-big"><b data-draw="tr-kpi" data-source="tr_son12" data-field="komur_pay" data-row="0">—</b></span>
+        <span class="sc-label">Önceki 12 ay: <b data-draw="tr-kpi" data-source="tr_son12" data-field="onceki_komur_pay" data-row="0">—</b></span>
+      </div>
+      <div class="sc-tile">
+        <span class="sc-label">Kömür kaynaklı CO₂, son 12 ay</span>
+        <span class="sc-big"><b data-draw="tr-kpi" data-source="tr_son12" data-field="komur_co2_mt" data-row="0">—</b><span class="sc-unit">milyon ton</span></span>
+        <span class="sc-label">Elektrik CO₂'sinin <b data-draw="tr-kpi" data-source="tr_son12" data-field="co2_pay" data-row="0">—</b> kadarı</span>
+      </div>
+      <div class="sc-tile">
+        <span class="sc-label">Şebeke CO₂ yoğunluğu, son 12 ay</span>
+        <span class="sc-big"><b data-draw="tr-kpi" data-source="tr_son12" data-field="co2_yogunluk" data-row="0">—</b><span class="sc-unit">g/kWh</span></span>
+        <span class="sc-label">Son ay: <b data-draw="tr-kpi" data-source="tr_son12" data-field="son_ay_yogunluk" data-row="0">—</b> g/kWh</span>
+      </div>
+    </div>
+
+    <div class="sc-card" id="tr-karisim-kart">
+      <h2>Aylık elektrik üretimi, kaynaklara göre</h2>
+      <p class="sc-note">TWh, üst üste. Kömür en altta; baharda hidroelektrik arttıkça kömür üretimi düşer.</p>
+      <div class="sc-legend">
+        <span><i data-seri="komur"></i>Kömür</span>
+        <span><i data-seri="gaz"></i>Doğalgaz</span>
+        <span><i data-seri="hidro"></i>Hidroelektrik</span>
+        <span><i data-seri="ruzgar"></i>Rüzgâr</span>
+        <span><i data-seri="gunes"></i>Güneş</span>
+        <span><i data-seri="diger"></i>Diğer (biyokütle, jeotermal, sıvı yakıt)</span>
+      </div>
+      <div class="sc-chart sc-tall" id="tr-karisim" data-draw="tr-karisim" data-source="turkiye"></div>
+    </div>
+
+    <div class="sc-grid">
+      <div class="sc-card" id="tr-pay-kart">
+        <h2>Kömürün üretimdeki payı</h2>
+        <p class="sc-note">Aylık, toplam elektrik üretimi içindeki yüzde.</p>
+        <div class="sc-chart" id="tr-pay" data-draw="tr-pay" data-source="turkiye"></div>
+      </div>
+      <div class="sc-card" id="tr-co2-kart">
+        <h2>Kömür kaynaklı CO₂ salımı</h2>
+        <p class="sc-note">Aylık, milyon ton CO₂.</p>
+        <div class="sc-chart" id="tr-co2" data-draw="tr-co2" data-source="turkiye"></div>
+      </div>
+    </div>
+
+    <section class="sc-card" id="tr-yillik-tablo">
+      <h2>Yıllık özet</h2>
+      <p class="sc-note">2026 yalnızca yayımlanmış ayları (Ocak'tan son aya kadar) içerir; diğer yıllarla doğrudan karşılaştırılmaz.</p>
+      <div class="sc-tablewrap">
+        <table class="sc-table" data-source="tr_yillik" data-row-key="yil">
+          <thead>
+            <tr>
+              <th data-field="yil">Yıl</th>
+              <th data-field="ay_sayisi">Ay</th>
+              <th data-field="toplam_twh">Toplam üretim (TWh)</th>
+              <th data-field="komur_twh">Kömür (TWh)</th>
+              <th data-field="komur_pay">Kömür payı</th>
+              <th data-field="komur_co2_mt">Kömür CO₂ (Mt)</th>
+              <th data-field="co2_pay">Kömürün CO₂ payı</th>
+              <th data-field="co2_yogunluk">CO₂ yoğunluğu (g/kWh)</th>
+            </tr>
+          </thead>
+          <tbody data-draw="tr-yillik-govde"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <p class="sc-note">Kaynak: Ember, Monthly Electricity Data (CC BY 4.0), Türkiye, Ocak 2018 – son yayımlanan ay; Ember bu veriyi TEİAŞ ve EPİAŞ istatistiklerinden derler. Kömür, linyit ve ithal kömürü birlikte kapsar. İkisini ayırmak için TEİAŞ yıllık istatistikleri, santral bazında saatlik üretim için EPİAŞ Şeffaflık Platformu kullanılabilir.</p>
+  </section>
+
+  <section class="sc" data-page="santral" id="santral" hidden>
+    <div class="sc-head">
+      <h2 class="sc-subtitle">Kömür santralleri saatlik üretim izleme (EPİAŞ, 2025)</h2>
+      <p class="sc-lead">EPİAŞ Şeffaflık Platformu'ndan 15 kömür santralinin 2025 yılı saatlik gerçek zamanlı üretimi. Bu santraller yıl boyunca <b data-draw="ts-ozet" data-source="filo_ozet" data-field="uretim_gwh" data-row="0">—</b> GWh elektrik üretti; üretimden hesaplanan CO₂ salımı yaklaşık <b data-draw="ts-ozet" data-source="filo_ozet" data-field="co2_mt" data-row="0">—</b> milyon ton. Üretimin <b data-draw="ts-ozet" data-source="filo_ozet" data-field="ithal_pay" data-row="0">—</b> kadarı üç ithal kömür santralinden geldi.</p>
+    </div>
+
+    <div class="sc-tiles">
+      <div class="sc-tile">
+        <span class="sc-label">15 santralin üretimi, 2025</span>
+        <span class="sc-big"><b data-draw="ts-ozet" data-source="filo_ozet" data-field="uretim_gwh" data-row="0">—</b><span class="sc-unit">GWh</span></span>
+      </div>
+      <div class="sc-tile">
+        <span class="sc-label">Linyit santralleri (12)</span>
+        <span class="sc-big"><b data-draw="ts-ozet" data-source="filo_ozet" data-field="linyit_gwh" data-row="0">—</b><span class="sc-unit">GWh</span></span>
+      </div>
+      <div class="sc-tile">
+        <span class="sc-label">İthal kömür santralleri (3)</span>
+        <span class="sc-big"><b data-draw="ts-ozet" data-source="filo_ozet" data-field="ithal_gwh" data-row="0">—</b><span class="sc-unit">GWh</span></span>
+      </div>
+      <div class="sc-tile">
+        <span class="sc-label">Hesaplanmış CO₂, 2025</span>
+        <span class="sc-big"><b data-draw="ts-ozet" data-source="filo_ozet" data-field="co2_mt" data-row="0">—</b><span class="sc-unit">milyon ton</span></span>
+      </div>
+    </div>
+
+    <section class="sc-card sc-live" id="ts-canli">
+      <div class="sc-live-top">
+        <div class="sc-section" style="gap: var(--cds-gap-xs)">
+          <h2>SCADA canlı izleme (kayıttan oynatma)</h2>
+          <p class="sc-note">Seçilen santralin EPİAŞ saatlik üretimi saat saat yeniden oynatılır. Durum: santralin 2025'teki en yüksek saatlik üretiminin %<b data-draw="ts-esik">—</b> altına inince "düşük yük", 0 olunca "durdu". CO₂ ölçüm değil, üretimden hesaplanır.</p>
+        </div>
+        <div class="sc-clock">
+          <span class="sc-big"><b data-draw="ts-canli" data-source="epias_saatlik" data-field="tarih">—</b></span>
+          <span class="sc-label">saat</span>
+          <span class="sc-big"><b data-draw="ts-canli" data-source="epias_saatlik" data-field="saat">—</b></span>
+          <span class="sc-label">:00</span>
+        </div>
+      </div>
+
+      <div class="sc-controls">
+        <select class="sc-select ts-santral" id="ts-santral" aria-label="Santral">
+          <option value="afsin_a">Afşin-Elbistan A</option>
+          <option value="afsin_b">Afşin-Elbistan B</option>
+          <option value="kemerkoy">Kemerköy</option>
+          <option value="yenikoy">Yeniköy</option>
+          <option value="yatagan">Yatağan</option>
+          <option value="soma_b">Soma B</option>
+          <option value="soma_kolin">Soma Kolin</option>
+          <option value="seyitomer">Seyitömer</option>
+          <option value="tufanbeyli">Tufanbeyli</option>
+          <option value="can">Çan</option>
+          <option value="kangal">Kangal</option>
+          <option value="orhaneli">Orhaneli</option>
+          <option value="hunutlu">Hunutlu (ithal kömür)</option>
+          <option value="isken">İsken Sugözü (ithal kömür)</option>
+          <option value="atlas">Atlas (ithal kömür)</option>
+        </select>
+        <button class="sc-btn ts-play" id="ts-play" type="button" aria-pressed="true"><span class="ts-when-playing">❚❚ Duraklat</span><span class="ts-when-paused" hidden>▶ Oynat</span></button>
+        <label class="sc-label" for="ts-speed">Hız</label>
+        <select class="sc-select ts-speed" id="ts-speed">
+          <option value="1">1 saat / sn</option>
+          <option value="4" selected>4 saat / sn</option>
+          <option value="24">24 saat / sn</option>
+        </select>
+        <input class="sc-range ts-pos" id="ts-pos" type="range" min="0" max="1000" step="1" value="0" aria-label="Kayıt konumu">
+        <div class="sc-pills" aria-live="polite">
+          <span data-draw="ts-durum" data-source="epias_saatlik"></span>
+          <span class="sc-pill ok" data-tdurum="calisiyor">Çalışıyor</span>
+          <span class="sc-pill warn" data-tdurum="dusuk" hidden>Düşük yük</span>
+          <span class="sc-pill bad" data-tdurum="durdu" hidden>Santral durdu</span>
+          <span class="sc-pill" data-tdurum="veriyok" hidden>Veri yok</span>
+        </div>
+      </div>
+
+      <div class="sc-gauges">
+        <div class="sc-gauge" data-tgauge="uretim"><span class="sc-label">Anlık üretim</span><span class="sc-big"><b data-draw="ts-canli" data-source="epias_saatlik" data-field="afsin_a" data-tcol="uretim">—</b><span class="sc-unit">MW</span></span></div>
+        <div class="sc-gauge"><span class="sc-label">Hesaplanmış CO₂</span><span class="sc-big"><b data-draw="ts-canli-co2" data-source="saatlik_co2">—</b><span class="sc-unit">ton/saat</span></span></div>
+        <div class="sc-gauge"><span class="sc-label">2025 en yüksek saatlik üretim</span><span class="sc-big"><b data-draw="ts-filo-deger" data-source="filo" data-field="maks_mw">—</b><span class="sc-unit">MW</span></span></div>
+        <div class="sc-gauge"><span class="sc-label">2025 toplam üretim</span><span class="sc-big"><b data-draw="ts-filo-deger" data-source="filo" data-field="uretim_gwh">—</b><span class="sc-unit">GWh</span></span></div>
+        <div class="sc-gauge"><span class="sc-label">Kullanım oranı, 2025</span><span class="sc-big"><b data-draw="ts-filo-deger" data-source="filo" data-field="kullanim">—</b></span></div>
+        <div class="sc-gauge"><span class="sc-label">Yakıt · il</span><span class="sc-big" style="font-size: var(--cds-font-size-body)"><b data-draw="ts-filo-deger" data-source="filo" data-field="yakit">—</b> · <b data-draw="ts-filo-deger" data-source="filo" data-field="il">—</b></span></div>
+      </div>
+
+      <div class="sc-live-body">
+        <div class="sc-section">
+          <p class="sc-note">Son 72 saatin üretimi, MW. Kesikli çizgi düşük yük sınırı.</p>
+          <div class="sc-chart sc-mini" id="ts-trend" data-draw="ts-trend" data-source="epias_saatlik"></div>
+        </div>
+        <div class="sc-section">
+          <p class="sc-note">Olay kaydı (bu oynatmada, en yeni üstte)</p>
+          <ul class="sc-log" id="ts-kayit" data-draw="ts-kayit" data-source="epias_saatlik"></ul>
+        </div>
+      </div>
+    </section>
+
+    <div class="sc-grid">
+      <div class="sc-card" id="ts-gunluk-kart">
+        <h2>Seçili santralin günlük üretimi, 2025</h2>
+        <p class="sc-note">GWh/gün. Sıfıra inen dönemler bakım veya arıza duruşlarıdır. Santrali yukarıdan ya da tablodan seçin.</p>
+        <div class="sc-chart" id="ts-gunluk" data-draw="ts-gunluk" data-source="gunluk_santral"></div>
+      </div>
+      <div class="sc-card" id="ts-yakit-kart">
+        <h2>Linyit ve ithal kömür santralleri, günlük</h2>
+        <p class="sc-note">GWh/gün. 12 linyit santralinin toplamı ile 3 ithal kömür santralinin toplamı.</p>
+        <div class="sc-legend">
+          <span><i data-tseri="0"></i>Linyit santralleri</span>
+          <span><i data-tseri="1"></i>İthal kömür santralleri</span>
+        </div>
+        <div class="sc-chart" id="ts-yakit" data-draw="ts-yakit" data-source="gunluk_santral"></div>
+      </div>
+    </div>
+
+    <section class="sc-card" id="ts-filo-tablo">
+      <h2>Santral karşılaştırması, 2025</h2>
+      <p class="sc-note">Satıra tıklayınca santral canlı izlemede açılır. Kullanım oranı = yıllık üretim ÷ (en yüksek saatlik üretim × verili saat sayısı); kurulu güç yerine gözlenen en yüksek üretim kullanılmıştır.</p>
+      <div class="sc-tablewrap">
+        <table class="sc-table ts-filo" data-source="filo" data-row-key="santral">
+          <thead>
+            <tr>
+              <th data-field="santral">Santral</th>
+              <th data-field="il">İl</th>
+              <th data-field="yakit">Yakıt</th>
+              <th data-field="uretim_gwh">Üretim (GWh)</th>
+              <th data-field="calisma_saat">Çalışma (saat)</th>
+              <th data-field="maks_mw">En yüksek (MW)</th>
+              <th data-field="ort_yuk">Ort. yük (MW)</th>
+              <th data-field="kullanim">Kullanım oranı</th>
+              <th data-field="co2_kt">CO₂ (bin ton)</th>
+            </tr>
+          </thead>
+          <tbody data-draw="ts-filo-govde"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <p class="sc-note">Kaynak: EPİAŞ Şeffaflık Platformu, gerçek zamanlı üretim (santral bazında, saatlik), 1 Ocak – 31 Aralık 2025. Bazı saatler EPİAŞ'ta yayımlanmamıştır ve "veri yok" olarak görünür. CO₂ yöntemi: IPCC 2006 varsayılan emisyon faktörleri (linyit <b data-draw="ts-sabit" data-k="lin_ef">—</b> t CO₂/TJ, ithal taşkömürü <b data-draw="ts-sabit" data-k="ith_ef">—</b> t CO₂/TJ) ve varsayılan santral verimi (linyit %<b data-draw="ts-sabit" data-k="lin_eta">—</b>, ithal kömür %<b data-draw="ts-sabit" data-k="ith_eta">—</b>). Bu varsayımlarla 1 MWh elektrik linyitte <b data-draw="ts-sabit" data-k="lin_tmwh">—</b> ton, ithal kömürde <b data-draw="ts-sabit" data-k="ith_tmwh">—</b> ton CO₂ demektir. Santrallerin gerçek verimi ve yakıt kalitesi farklı olduğu için değerler tahmindir.</p>
+  </section>
+
+  <section class="sc" data-page="emisyon" id="emisyon" hidden>
+  <header class="sc-head" id="ozet">
+    <h2 class="sc-subtitle">Baca gazı emisyon izleme örneği: Coal Creek linyit santrali (ABD)</h2>
+    <p class="sc-lead">Coal Creek linyit santrali (2 × 600 MW, Kuzey Dakota, ABD), 2024 yılı saatlik baca gazı ölçümleri (CEMS). Yıl boyunca <b data-draw="kpi" data-source="ozet" data-field="uretim_gwh" data-row="0">—</b> GWh elektrik üretildi ve <b data-draw="kpi" data-source="ozet" data-field="co2_bin_ton" data-row="0">—</b> bin ton CO₂ salındı. NOx, çalışma saatlerinin <b data-draw="kpi" data-source="ozet" data-field="nox_asim_pay" data-row="0">—</b> kadarında <b data-draw="esik-nox">—</b> mg/Nm³ sınırının üstündeydi. SO₂ için bu oran <b data-draw="kpi" data-source="ozet" data-field="so2_asim_pay" data-row="0">—</b>.</p>
+  </header>
+
+  <div class="sc-tiles" id="gostergeler">
+    <div class="sc-tile">
+      <span class="sc-label">Brüt üretim, 2024</span>
+      <span class="sc-big"><b data-draw="kpi" data-source="ozet" data-field="uretim_gwh" data-row="0">—</b><span class="sc-unit">GWh</span></span>
+    </div>
+    <div class="sc-tile">
+      <span class="sc-label">CO₂ yoğunluğu</span>
+      <span class="sc-big"><b data-draw="kpi" data-source="ozet" data-field="co2_t_mwh" data-row="0">—</b><span class="sc-unit">t/MWh</span></span>
+    </div>
+    <div class="sc-tile">
+      <span class="sc-label">Toplam SO₂</span>
+      <span class="sc-big"><b data-draw="kpi" data-source="ozet" data-field="so2_ton" data-row="0">—</b><span class="sc-unit">ton</span></span>
+    </div>
+    <div class="sc-tile">
+      <span class="sc-label">Toplam NOx</span>
+      <span class="sc-big"><b data-draw="kpi" data-source="ozet" data-field="nox_ton" data-row="0">—</b><span class="sc-unit">ton</span></span>
+    </div>
+    <div class="sc-tile">
+      <span class="sc-label">NOx sınır aşımı (çalışma saatlerinin payı)</span>
+      <span class="sc-big"><b data-draw="kpi" data-source="ozet" data-field="nox_asim_pay" data-row="0">—</b></span>
+    </div>
+    <div class="sc-tile">
+      <span class="sc-label">Ünite çalışma saati (iki ünite)</span>
+      <span class="sc-big"><b data-draw="kpi" data-source="ozet" data-field="calisma_saat" data-row="0">—</b><span class="sc-unit">saat</span></span>
+    </div>
+  </div>
+
+  <section class="sc-card sc-live" id="canli">
+    <div class="sc-live-top">
+      <div class="sc-section" style="gap: var(--cds-gap-xs)">
+        <h2>SCADA canlı izleme (kayıttan oynatma)</h2>
+        <p class="sc-note">Bir ünitenin gerçek baca ölçümleri saat saat yeniden oynatılır; sahadaki CEMS/IoT akışı kontrol odasına böyle düşer. Alarm sınırı: SO₂ ve NOx için <b data-draw="esik-so2">—</b> mg/Nm³ (kuru gaz, %6 O₂).</p>
+      </div>
+      <div class="sc-clock">
+        <span class="sc-big"><b data-draw="canli" data-source="olcumler" data-field="tarih">—</b></span>
+        <span class="sc-label">saat</span>
+        <span class="sc-big"><b data-draw="canli" data-source="olcumler" data-field="saat">—</b></span>
+        <span class="sc-label">:00</span>
+      </div>
+    </div>
+
+    <div class="sc-controls">
+      <select class="sc-select sc-unite" id="sc-unite" aria-label="Ünite">
+        <option value="Ünite 1">Ünite 1</option>
+        <option value="Ünite 2">Ünite 2</option>
+      </select>
+      <button class="sc-btn sc-play" id="sc-play" type="button" aria-pressed="true"><span class="sc-when-playing">❚❚ Duraklat</span><span class="sc-when-paused" hidden>▶ Oynat</span></button>
+      <label class="sc-label" for="sc-speed">Hız</label>
+      <select class="sc-select sc-speed" id="sc-speed">
+        <option value="1">1 saat / sn</option>
+        <option value="4" selected>4 saat / sn</option>
+        <option value="24">24 saat / sn</option>
+      </select>
+      <input class="sc-range sc-pos" id="sc-pos" type="range" min="0" max="1000" step="1" value="0" aria-label="Kayıt konumu">
+      <div class="sc-pills" aria-live="polite">
+        <span data-draw="canli-durum" data-source="olcumler"></span>
+        <span class="sc-pill ok" data-durum="normal">Normal çalışma</span>
+        <span class="sc-pill bad" data-durum="so2" hidden>SO₂ sınırı aşıldı</span>
+        <span class="sc-pill bad" data-durum="nox" hidden>NOx sınırı aşıldı</span>
+        <span class="sc-pill warn" data-durum="durus" hidden>Ünite devre dışı</span>
+      </div>
+    </div>
+
+    <div class="sc-gauges">
+      <div class="sc-gauge" data-gauge="yuk_mw"><span class="sc-label">Brüt yük</span><span class="sc-big"><b data-draw="canli" data-source="olcumler" data-field="yuk_mw">—</b><span class="sc-unit">MW</span></span></div>
+      <div class="sc-gauge" data-gauge="so2_mg"><span class="sc-label">SO₂ konsantrasyonu</span><span class="sc-big"><b data-draw="canli" data-source="olcumler" data-field="so2_mg">—</b><span class="sc-unit">mg/Nm³</span></span></div>
+      <div class="sc-gauge" data-gauge="nox_mg"><span class="sc-label">NOx konsantrasyonu</span><span class="sc-big"><b data-draw="canli" data-source="olcumler" data-field="nox_mg">—</b><span class="sc-unit">mg/Nm³</span></span></div>
+      <div class="sc-gauge" data-gauge="co2_ton"><span class="sc-label">CO₂ salımı</span><span class="sc-big"><b data-draw="canli" data-source="olcumler" data-field="co2_ton">—</b><span class="sc-unit">ton/saat</span></span></div>
+      <div class="sc-gauge" data-gauge="so2_kg"><span class="sc-label">SO₂ kütlesi</span><span class="sc-big"><b data-draw="canli" data-source="olcumler" data-field="so2_kg">—</b><span class="sc-unit">kg/saat</span></span></div>
+      <div class="sc-gauge" data-gauge="nox_kg"><span class="sc-label">NOx kütlesi</span><span class="sc-big"><b data-draw="canli" data-source="olcumler" data-field="nox_kg">—</b><span class="sc-unit">kg/saat</span></span></div>
+      <div class="sc-gauge" data-gauge="isi_gj"><span class="sc-label">Yakıt ısı girdisi</span><span class="sc-big"><b data-draw="canli" data-source="olcumler" data-field="isi_gj">—</b><span class="sc-unit">GJ/saat</span></span></div>
+    </div>
+
+    <div class="sc-live-body">
+      <div class="sc-section">
+        <p class="sc-note">Son 72 saat: üstte SO₂ ve NOx (kesikli çizgi sınır), altta brüt yük.</p>
+        <div class="sc-chart sc-mini" id="canli-trend" data-draw="canli-trend" data-source="olcumler"></div>
+      </div>
+      <div class="sc-section">
+        <p class="sc-note">Alarm kaydı (bu oynatmada, en yeni üstte)</p>
+        <ul class="sc-log" id="alarm-kaydi" data-draw="alarm-kaydi" data-source="olcumler"></ul>
+      </div>
+    </div>
+  </section>
+
+  <section class="sc-section" id="trendler">
+    <h2>Günlük değerler, 2024</h2>
+    <div class="sc-grid">
+      <div class="sc-card" id="gunluk-so2-kart">
+        <h2>SO₂ konsantrasyonu</h2>
+        <p class="sc-note">İki ünitenin çalışma saatlerinin günlük ortalaması, mg/Nm³. Kesikli çizgi sınır değer.</p>
+        <div class="sc-chart" id="gunluk-so2" data-draw="gunluk-so2" data-source="gunluk"></div>
+      </div>
+      <div class="sc-card" id="gunluk-nox-kart">
+        <h2>NOx konsantrasyonu</h2>
+        <p class="sc-note">İki ünitenin çalışma saatlerinin günlük ortalaması, mg/Nm³. Kesikli çizgi sınır değer.</p>
+        <div class="sc-chart" id="gunluk-nox" data-draw="gunluk-nox" data-source="gunluk"></div>
+      </div>
+      <div class="sc-card" id="gunluk-uretim-kart">
+        <h2>Elektrik üretimi</h2>
+        <p class="sc-note">Santralin günlük brüt üretimi, GWh. Ani düşüşler ünite duruşlarıdır.</p>
+        <div class="sc-chart" id="gunluk-uretim" data-draw="gunluk-uretim" data-source="gunluk"></div>
+      </div>
+      <div class="sc-card" id="yuk-emisyon-kart">
+        <h2>Yüke göre emisyon</h2>
+        <p class="sc-note">Ünite yükü 50 MW'lık aralıklara ayrıldı; her aralıkta ortalama SO₂ ve NOx, mg/Nm³. Sınırı aşan ortalama kırmızı çizilir.</p>
+        <div class="sc-chart" id="yuk-emisyon" data-draw="yuk-emisyon" data-source="yuk_bin"></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sc-card" id="aylik-tablo">
+    <h2>Aylık özet</h2>
+    <p class="sc-note">Konsantrasyonlar çalışma saatlerinin ortalamasıdır. Aşım payı, sınırın üstünde geçen ünite-saatlerin oranıdır. Kırmızı hücre yılın en kötü ayıdır.</p>
+    <div class="sc-tablewrap">
+      <table class="sc-table" data-source="aylik" data-row-key="ay">
+        <thead>
+          <tr>
+            <th data-field="ay">Ay</th>
+            <th data-field="uretim_gwh">Üretim (GWh)</th>
+            <th data-field="co2_bin_ton">CO₂ (bin ton)</th>
+            <th data-field="co2_t_mwh">CO₂ (t/MWh)</th>
+            <th data-field="so2_ort">Ort. SO₂</th>
+            <th data-field="so2_asim_pay">SO₂ aşım payı</th>
+            <th data-field="nox_ort">Ort. NOx</th>
+            <th data-field="nox_asim_pay">NOx aşım payı</th>
+            <th data-field="calisma_saat">Çalışma (ünite-saat)</th>
+          </tr>
+        </thead>
+        <tbody data-draw="aylik-govde"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <p class="sc-note">Kaynak: ABD Çevre Koruma Ajansı (EPA) Clean Air Markets Program Data, 2024 saatlik Part 75 emisyon verisi, Coal Creek santrali (tesis no 6030). Kütleler metrik birime çevrildi. Konsantrasyonlar, EPA'nın lb/mmBtu emisyon oranlarından linyit için F-faktörü (9.860 dscf/mmBtu) ile kuru gaz %6 O₂ referansında mg/Nm³'e yaklaşık olarak çevrildi. 200 mg/Nm³ sınırı, Büyük Yakma Tesisleri Yönetmeliği ve AB Endüstriyel Emisyonlar Direktifi'nde 300 MWt üstü mevcut katı yakıtlı tesisler için verilen değerdir; yasal uygunluk saatlik değil günlük ve aylık ortalamalarla değerlendirilir. Toz (PM) bu veri setinde yoktur. Türkiye'deki santrallerin baca gazı ölçümleri kamuya açık olmadığı için bu bölümde ABD'deki bir linyit santralinin verisi kullanılmıştır.</p>
+  </section>
+</div>
+
+<script>
+  // Sınır değerler, mg/Nm³ (kuru gaz, %6 O₂)
+  window.ESIK = { SO2: 200, NOX: 200 };
+  window.scFmt = (v, d) => new Intl.NumberFormat('tr-TR', { minimumFractionDigits: d, maximumFractionDigits: d }).format(v);
+  window.scPct = (v) => '%' + window.scFmt(v * 100, 1);
+  window.scNum = (v) => (v === '' || v == null ? null : Number(v));
+  window.scFail = (el, g, isChart) => {
+    el.classList.toggle('dash-skeleton', g.status === 'loading');
+    if (g.status === 'error') {
+      const f = document.createElement('div');
+      f.className = 'sc-fail';
+      f.textContent = 'Failed to load';
+      el.replaceChildren(f);
+    } else if (isChart) {
+      el.replaceChildren();
+    } else {
+      el.textContent = '—';
+    }
+  };
+  window.scMeasure = (svg, texts) => {
+    const t = svg.append('text').attr('font-size', 'var(--cds-font-size-caption)').attr('visibility', 'hidden');
+    let w = 0;
+    texts.forEach((s) => { t.text(s); w = Math.max(w, t.node().getComputedTextLength()); });
+    t.remove();
+    return w;
+  };
+  window.AYLAR = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+</script>
+
+<script>
+  dash.calc('ozet', {
+    title: 'Yıllık toplamlar',
+    description: 'İki ünitenin 2024 toplam üretimi, CO₂/SO₂/NOx kütleleri, CO₂ yoğunluğu ve 200 mg/Nm³ sınırını aşan çalışma saatlerinin payı.',
+    inputs: ['olcumler'],
+    fn: (olcumler) => {
+      const r = (v, d) => Math.round(v * 10 ** d) / 10 ** d;
+      let mwh = 0, co2 = 0, so2 = 0, nox = 0, cal = 0, n = 0, so2A = 0, noxA = 0;
+      for (const o of olcumler) {
+        mwh += Number(o.uretim_mwh) || 0;
+        co2 += Number(o.co2_ton) || 0;
+        so2 += Number(o.so2_kg) || 0;
+        nox += Number(o.nox_kg) || 0;
+        cal += Number(o.calisma) || 0;
+        if (o.so2_mg !== '' && o.so2_mg != null) {
+          n++;
+          if (Number(o.so2_mg) > 200) so2A++;
+          if (Number(o.nox_mg) > 200) noxA++;
+        }
+      }
+      return [{
+        uretim_gwh: r(mwh / 1000, 0),
+        co2_bin_ton: r(co2 / 1000, 0),
+        co2_t_mwh: r(co2 / mwh, 3),
+        so2_ton: r(so2 / 1000, 0),
+        nox_ton: r(nox / 1000, 0),
+        calisma_saat: r(cal, 0),
+        so2_asim_pay: r(so2A / n, 4),
+        nox_asim_pay: r(noxA / n, 4),
+      }];
+    },
+  });
+
+  dash.calc('aylik', {
+    title: 'Aylık özet',
+    description: 'Her ay için üretim, CO₂, CO₂ yoğunluğu, çalışma saatlerinin ortalama SO₂/NOx konsantrasyonu ve 200 mg/Nm³ aşım payları.',
+    inputs: ['olcumler'],
+    fn: (olcumler) => {
+      const r = (v, d) => Math.round(v * 10 ** d) / 10 ** d;
+      const g = d3.group(olcumler, (o) => String(o.tarih).slice(0, 7));
+      return [...g].sort((a, b) => d3.ascending(a[0], b[0])).map(([ay, s]) => {
+        const mwh = d3.sum(s, (o) => Number(o.uretim_mwh) || 0);
+        const co2 = d3.sum(s, (o) => Number(o.co2_ton) || 0);
+        const on = s.filter((o) => o.so2_mg !== '' && o.so2_mg != null);
+        return {
+          ay,
+          uretim_gwh: r(mwh / 1000, 1),
+          co2_bin_ton: r(co2 / 1000, 1),
+          co2_t_mwh: mwh ? r(co2 / mwh, 3) : null,
+          so2_ort: on.length ? r(d3.mean(on, (o) => Number(o.so2_mg)), 1) : null,
+          so2_asim_pay: on.length ? r(on.filter((o) => Number(o.so2_mg) > 200).length / on.length, 4) : null,
+          nox_ort: on.length ? r(d3.mean(on, (o) => Number(o.nox_mg)), 1) : null,
+          nox_asim_pay: on.length ? r(on.filter((o) => Number(o.nox_mg) > 200).length / on.length, 4) : null,
+          calisma_saat: r(d3.sum(s, (o) => Number(o.calisma) || 0), 0),
+        };
+      });
+    },
+  });
+
+  dash.calc('gunluk', {
+    title: 'Günlük değerler',
+    description: 'Her gün için santralin toplam brüt üretimi (GWh) ve iki ünitenin çalışma saatlerinin ortalama SO₂/NOx konsantrasyonu.',
+    inputs: ['olcumler'],
+    fn: (olcumler) => {
+      const r = (v, d) => Math.round(v * 10 ** d) / 10 ** d;
+      const g = d3.group(olcumler, (o) => o.tarih);
+      return [...g].sort((a, b) => d3.ascending(a[0], b[0])).map(([tarih, s]) => {
+        const on = s.filter((o) => o.so2_mg !== '' && o.so2_mg != null);
+        return {
+          tarih,
+          uretim_gwh: r(d3.sum(s, (o) => Number(o.uretim_mwh) || 0) / 1000, 2),
+          so2_ort: on.length ? r(d3.mean(on, (o) => Number(o.so2_mg)), 1) : null,
+          nox_ort: on.length ? r(d3.mean(on, (o) => Number(o.nox_mg)), 1) : null,
+        };
+      });
+    },
+  });
+
+  dash.calc('yuk_bin', {
+    title: 'Yük aralığına göre emisyon',
+    description: 'Çalışılan ünite-saatler brüt yüke göre 50 MW aralıklara ayrılır; her aralıkta ortalama SO₂, NOx (mg/Nm³), CO₂ yoğunluğu (t/MWh) ve saat sayısı.',
+    inputs: ['olcumler'],
+    fn: (olcumler) => {
+      const r = (v, d) => Math.round(v * 10 ** d) / 10 ** d;
+      const on = olcumler.filter((o) => o.so2_mg !== '' && o.so2_mg != null && Number(o.yuk_mw) > 0);
+      const g = d3.group(on, (o) => Math.min(600, Math.floor(Number(o.yuk_mw) / 50) * 50));
+      return [...g].sort((a, b) => a[0] - b[0]).map(([alt, s]) => {
+        const mwh = d3.sum(s, (o) => Number(o.uretim_mwh) || 0);
+        return {
+          aralik: alt + '–' + (alt + 50),
+          alt,
+          saat: s.length,
+          so2: r(d3.mean(s, (o) => Number(o.so2_mg)), 1),
+          nox: r(d3.mean(s, (o) => Number(o.nox_mg)), 1),
+          co2_t_mwh: mwh ? r(d3.sum(s, (o) => Number(o.co2_ton) || 0) / mwh, 3) : null,
+        };
+      });
+    },
+  });
+</script>
+
+<script>
+  const kpiFmt = {
+    uretim_gwh: (v) => scFmt(v, 0), co2_bin_ton: (v) => scFmt(v, 0), co2_t_mwh: (v) => scFmt(v, 3),
+    so2_ton: (v) => scFmt(v, 0), nox_ton: (v) => scFmt(v, 0), calisma_saat: (v) => scFmt(v, 0),
+    so2_asim_pay: scPct, nox_asim_pay: scPct,
+  };
+  dash.draw('kpi', (el) => {
+    const g = dash.data('ozet');
+    if (g.status !== 'ok' || !g.data.length) return scFail(el, g);
+    el.classList.remove('dash-skeleton');
+    const f = el.dataset.field;
+    el.textContent = (kpiFmt[f] || String)(g.data[0][f]);
+  });
+  dash.draw('esik-nox', (el) => { el.textContent = scFmt(ESIK.NOX, 0); });
+  dash.draw('esik-so2', (el) => { el.textContent = scFmt(ESIK.SO2, 0); });
+
+  dash.draw('aylik-govde', (tb) => {
+    const g = dash.data('aylik');
+    tb.replaceChildren();
+    if (g.status !== 'ok') return;
+    const worstKeys = ['co2_t_mwh', 'so2_ort', 'so2_asim_pay', 'nox_ort', 'nox_asim_pay'];
+    const worst = Object.fromEntries(worstKeys.map((k) => [k, d3.max(g.data, (d) => d[k])]));
+    const opt = (f) => (v) => (v == null ? '—' : f(v));
+    const cols = [
+      ['ay', (v) => AYLAR[Number(String(v).slice(5, 7)) - 1] || String(v)],
+      ['uretim_gwh', opt((v) => scFmt(v, 1))], ['co2_bin_ton', opt((v) => scFmt(v, 1))], ['co2_t_mwh', opt((v) => scFmt(v, 3))],
+      ['so2_ort', opt((v) => scFmt(v, 1))], ['so2_asim_pay', opt(scPct)], ['nox_ort', opt((v) => scFmt(v, 1))],
+      ['nox_asim_pay', opt(scPct)], ['calisma_saat', opt((v) => scFmt(v, 0))],
+    ];
+    for (const d of g.data) {
+      const tr = document.createElement('tr');
+      tr.dataset.key = String(d.ay);
+      for (const [c, f] of cols) {
+        const td = document.createElement('td');
+        td.textContent = f(d[c]);
+        if (worst[c] != null && d[c] === worst[c]) td.className = 'is-bad';
+        tr.append(td);
+      }
+      tb.append(tr);
+    }
+  });
+</script>
+
+<script>
+  // Günlük çizgi grafikleri
+  function scDaily(el, field, opts) {
+    const g = dash.data('gunluk');
+    if (g.status !== 'ok' || !g.data.length) return scFail(el, g, true);
+    el.classList.remove('dash-skeleton');
+    el.replaceChildren();
+    const rows = g.data.map((d) => ({ ...d, t: new Date(d.tarih + 'T00:00:00Z') }));
+    const vals = rows.filter((d) => d[field] != null);
+    const W = Math.max(280, el.clientWidth || 600), H = 220;
+    const svg = d3.select(el).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('height', H);
+    let hi = d3.max(vals, (d) => d[field]);
+    if (opts.esik != null) hi = Math.max(hi, opts.esik);
+    const y0 = d3.scaleLinear([0, hi], [0, 1]).nice();
+    const ticks = y0.ticks(5);
+    const dec = opts.dec ?? 0;
+    const m = { t: 10, r: opts.esik != null ? 52 : 8, b: 24, l: scMeasure(svg, ticks.map((t) => scFmt(t, dec))) + 8 };
+    const x = d3.scaleUtc(d3.extent(rows, (d) => d.t), [m.l, W - m.r]);
+    const y = d3.scaleLinear(y0.domain(), [H - m.b, m.t]);
+    svg.append('g').selectAll('line').data(ticks).join('line')
+      .attr('x1', m.l).attr('x2', W - m.r).attr('y1', (t) => y(t)).attr('y2', (t) => y(t)).attr('stroke', 'var(--cds-chart-grid)');
+    svg.append('g').selectAll('text').data(ticks).join('text')
+      .attr('x', m.l - 6).attr('y', (t) => y(t)).attr('dy', '0.32em').attr('text-anchor', 'end')
+      .attr('font-size', 'var(--cds-font-size-caption)').attr('fill', 'var(--color-fg-muted)').text((t) => scFmt(t, dec));
+    const months = d3.utcMonth.range(d3.utcMonth.ceil(x.domain()[0]), x.domain()[1]);
+    const step = (W - m.l - m.r) / 12 < 34 ? 3 : (W - m.l - m.r) / 12 < 44 ? 2 : 1;
+    svg.append('g').selectAll('text').data(months.filter((_, i) => i % step === 0)).join('text')
+      .attr('x', (d) => x(d)).attr('y', H - 6).attr('text-anchor', 'start')
+      .attr('font-size', 'var(--cds-font-size-caption)').attr('fill', 'var(--color-fg-muted)')
+      .text((d) => AYLAR[d.getUTCMonth()].slice(0, 3));
+    svg.append('line').attr('x1', m.l).attr('x2', W - m.r).attr('y1', H - m.b).attr('y2', H - m.b).attr('stroke', 'var(--cds-chart-axis)');
+    if (opts.esik != null) {
+      svg.append('line').attr('x1', m.l).attr('x2', W - m.r).attr('y1', y(opts.esik)).attr('y2', y(opts.esik))
+        .attr('stroke', 'var(--cds-chart-status-critical)').attr('stroke-width', 1.5).attr('stroke-dasharray', '5 4');
+      svg.append('text').attr('x', W - m.r + 4).attr('y', y(opts.esik)).attr('dy', '0.32em')
+        .attr('font-size', 'var(--cds-font-size-caption)').attr('fill', 'var(--color-bad)').text('Sınır ' + scFmt(opts.esik, 0));
+    }
+    svg.append('path').datum(rows).attr('fill', 'none').attr('stroke', opts.color).attr('stroke-width', 1.5)
+      .attr('stroke-linejoin', 'round').attr('stroke-linecap', 'round')
+      .attr('d', d3.line().defined((d) => d[field] != null).x((d) => x(d.t)).y((d) => y(d[field])));
+    if (opts.esik != null) {
+      svg.append('g').selectAll('circle').data(vals.filter((d) => d[field] > opts.esik)).join('circle')
+        .attr('cx', (d) => x(d.t)).attr('cy', (d) => y(d[field])).attr('r', 2.5).attr('fill', 'var(--cds-chart-status-critical)');
+    }
+    const dot = svg.append('circle').attr('r', 3.5).attr('fill', opts.color).attr('stroke', 'var(--color-panel)').attr('stroke-width', 1.5).attr('visibility', 'hidden');
+    const tip = d3.select(el).append('div').attr('class', 'sc-tip').style('visibility', 'hidden');
+    const bis = d3.bisector((d) => d.t).center;
+    svg.append('rect').attr('x', m.l).attr('y', m.t).attr('width', W - m.l - m.r).attr('height', H - m.t - m.b).attr('fill', 'transparent')
+      .on('pointermove', (ev) => {
+        const [px] = d3.pointer(ev);
+        const d = rows[bis(rows, x.invert(px))];
+        if (!d) return;
+        const tipY = d[field] == null ? y(0) : y(d[field]);
+        dot.attr('cx', x(d.t)).attr('cy', tipY).attr('visibility', d[field] == null ? 'hidden' : 'visible');
+        tip.style('visibility', 'visible').html('');
+        tip.append('div').attr('class', 'd').text(`${d.t.getUTCDate()} ${AYLAR[d.t.getUTCMonth()]} 2024`);
+        tip.append('div').text(d[field] == null ? 'Ünite çalışmadı' : `${opts.name}: ${scFmt(d[field], dec)} ${opts.unit}`);
+        const sx = el.clientWidth / W, tw = tip.node().offsetWidth;
+        let left = x(d.t) * sx + 10;
+        if (left + tw > el.clientWidth) left = x(d.t) * sx - tw - 10;
+        tip.style('left', Math.max(0, left) + 'px').style('top', Math.max(0, tipY * sx - 44) + 'px');
+      })
+      .on('pointerleave', () => { dot.attr('visibility', 'hidden'); tip.style('visibility', 'hidden'); });
+  }
+  dash.draw('gunluk-so2', (el) => scDaily(el, 'so2_ort', { color: dash.colors[0], esik: ESIK.SO2, name: 'SO₂', unit: 'mg/Nm³' }));
+  dash.draw('gunluk-nox', (el) => scDaily(el, 'nox_ort', { color: dash.colors[1], esik: ESIK.NOX, name: 'NOx', unit: 'mg/Nm³' }));
+  dash.draw('gunluk-uretim', (el) => scDaily(el, 'uretim_gwh', { color: dash.colors[2], dec: 0, name: 'Üretim', unit: 'GWh' }));
+
+  dash.draw('yuk-emisyon', (el) => {
+    const g = dash.data('yuk_bin');
+    if (g.status !== 'ok' || !g.data.length) return scFail(el, g, true);
+    el.classList.remove('dash-skeleton');
+    el.replaceChildren();
+    const rows = g.data;
+    const W = Math.max(280, el.clientWidth || 600), H = 220;
+    const svg = d3.select(el).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('height', H);
+    const y0 = d3.scaleLinear([0, d3.max(rows, (d) => Math.max(d.so2, d.nox, ESIK.SO2))], [0, 1]).nice();
+    const ticks = y0.ticks(5);
+    const m = { t: 22, r: 8, b: 38, l: scMeasure(svg, ticks.map((t) => scFmt(t, 0))) + 8 };
+    const x = d3.scaleBand(rows.map((d) => d.aralik), [m.l, W - m.r]).paddingInner(0.25).paddingOuter(0.1);
+    const sub = d3.scaleBand(['so2', 'nox'], [0, x.bandwidth()]).padding(0.08);
+    const y = d3.scaleLinear(y0.domain(), [H - m.b, m.t]);
+    svg.append('g').selectAll('line').data(ticks).join('line')
+      .attr('x1', m.l).attr('x2', W - m.r).attr('y1', (t) => y(t)).attr('y2', (t) => y(t)).attr('stroke', 'var(--cds-chart-grid)');
+    svg.append('g').selectAll('text').data(ticks).join('text')
+      .attr('x', m.l - 6).attr('y', (t) => y(t)).attr('dy', '0.32em').attr('text-anchor', 'end')
+      .attr('font-size', 'var(--cds-font-size-caption)').attr('fill', 'var(--color-fg-muted)').text((t) => scFmt(t, 0));
+    const bw = Math.min(32, sub.bandwidth()), off = (sub.bandwidth() - bw) / 2;
+    const grp = svg.append('g').selectAll('g').data(rows).join('g').attr('transform', (d) => `translate(${x(d.aralik)},0)`);
+    const series = [['so2', dash.colors[0], ESIK.SO2], ['nox', dash.colors[1], ESIK.NOX]];
+    for (const [k, c, lim] of series) {
+      grp.append('rect').attr('x', sub(k) + off).attr('width', bw).attr('y', (d) => y(d[k])).attr('height', (d) => y(0) - y(d[k]))
+        .attr('rx', 2).attr('fill', (d) => (d[k] > lim ? 'var(--cds-chart-status-critical)' : c));
+    }
+    svg.append('line').attr('x1', m.l).attr('x2', W - m.r).attr('y1', y(ESIK.SO2)).attr('y2', y(ESIK.SO2))
+      .attr('stroke', 'var(--cds-chart-status-critical)').attr('stroke-width', 1.5).attr('stroke-dasharray', '5 4');
+    svg.append('line').attr('x1', m.l).attr('x2', W - m.r).attr('y1', y(0)).attr('y2', y(0)).attr('stroke', 'var(--cds-chart-axis)');
+    const narrow = x.bandwidth() < 52;
+    svg.append('g').selectAll('text').data(rows).join('text')
+      .attr('x', (d) => x(d.aralik) + x.bandwidth() / 2).attr('y', H - m.b + 15).attr('text-anchor', 'middle')
+      .attr('font-size', 'var(--cds-font-size-caption)').attr('fill', 'var(--color-fg-muted)')
+      .text((d) => (narrow ? String(d.alt) : d.aralik));
+    svg.append('text').attr('x', (m.l + W - m.r) / 2).attr('y', H - 4).attr('text-anchor', 'middle')
+      .attr('font-size', 'var(--cds-font-size-caption)').attr('fill', 'var(--color-fg-muted)').text('Ünite brüt yükü (MW)');
+    const lg = svg.append('g').attr('transform', `translate(${W - m.r},4)`);
+    let lx = 0;
+    [['NOx', dash.colors[1]], ['SO₂', dash.colors[0]]].forEach(([n, c]) => {
+      const t = lg.append('text').attr('y', 6).attr('x', lx).attr('dy', '0.32em').attr('text-anchor', 'end')
+        .attr('font-size', 'var(--cds-font-size-caption)').attr('fill', 'var(--color-fg-muted)').text(n);
+      const w = t.node().getComputedTextLength();
+      lg.append('rect').attr('x', lx - w - 14).attr('y', 1).attr('width', 10).attr('height', 10).attr('rx', 2).attr('fill', c);
+      lx -= w + 26;
+    });
+    const tip = d3.select(el).append('div').attr('class', 'sc-tip').style('visibility', 'hidden');
+    grp.append('rect').attr('width', x.bandwidth()).attr('y', m.t).attr('height', H - m.b - m.t).attr('fill', 'transparent')
+      .on('pointermove', (ev, d) => {
+        tip.style('visibility', 'visible').html('');
+        tip.append('div').attr('class', 'd').text(`${d.aralik} MW · ${scFmt(d.saat, 0)} ünite-saat`);
+        tip.append('div').text(`SO₂: ${scFmt(d.so2, 1)} mg/Nm³`);
+        tip.append('div').text(`NOx: ${scFmt(d.nox, 1)} mg/Nm³`);
+        if (d.co2_t_mwh != null) tip.append('div').text(`CO₂ yoğunluğu: ${scFmt(d.co2_t_mwh, 3)} t/MWh`);
+        const sx = el.clientWidth / W, tw = tip.node().offsetWidth;
+        let left = (x(d.aralik) + x.bandwidth()) * sx + 6;
+        if (left + tw > el.clientWidth) left = x(d.aralik) * sx - tw - 6;
+        tip.style('left', Math.max(0, left) + 'px').style('top', '8px');
+      })
+      .on('pointerleave', () => tip.style('visibility', 'hidden'));
+  });
+</script>
+
+<script>
+  // SCADA kayıttan oynatma
+  window.SCADA = window.SCADA || { unite: 'Ünite 1', i: null, playing: true, speed: 4, log: [], prev: null, cache: null };
+  const S = window.SCADA;
+  const n0 = (d) => (v) => (v === '' || v == null ? '—' : scFmt(Number(v), d));
+  const liveFmt = {
+    tarih: (v) => String(v), saat: (v) => String(v).padStart(2, '0'),
+    yuk_mw: n0(0), so2_mg: n0(1), nox_mg: n0(1), co2_ton: n0(1), so2_kg: n0(0), nox_kg: n0(0), isi_gj: n0(0),
+  };
+  // Seçili ünitenin satırları; panel işaretleri tüm veri setindeki satır numarasını taşır
+  const unitRows = () => {
+    const g = dash.data('olcumler');
+    if (g.status !== 'ok' || !g.data.length) return null;
+    if (!S.cache || S.cache.src !== g.data || S.cache.unite !== S.unite) {
+      const idx = [];
+      g.data.forEach((r, k) => { if (r.unite === S.unite) idx.push(k); });
+      S.cache = { src: g.data, unite: S.unite, idx };
+      if (S.i == null || S.i >= idx.length) {
+        const first = idx.findIndex((k) => scNum(g.data[k].nox_mg) > ESIK.NOX);
+        S.i = Math.max(0, first - 30);
+      }
+    }
+    return S.cache.idx.length ? { all: g.data, idx: S.cache.idx } : null;
+  };
+  const cur = (u) => u.all[u.idx[S.i]];
+  const durumOf = (r) => {
+    if (!(Number(r.calisma) > 0) || r.so2_mg === '') return 'durus';
+    if (scNum(r.so2_mg) > ESIK.SO2) return 'so2';
+    if (scNum(r.nox_mg) > ESIK.NOX) return 'nox';
+    return 'normal';
+  };
+  const syncControls = (u) => {
+    document.querySelectorAll('.sc-pos').forEach((p) => { if (p !== document.activeElement) p.value = String(Math.round(S.i / Math.max(1, u.idx.length - 1) * 1000)); });
+    document.querySelectorAll('.sc-unite').forEach((s) => { if (s !== document.activeElement) s.value = S.unite; });
+    document.querySelectorAll('.sc-play').forEach((b) => b.setAttribute('aria-pressed', String(S.playing)));
+    document.querySelectorAll('.sc-when-playing').forEach((s) => { s.hidden = !S.playing; });
+    document.querySelectorAll('.sc-when-paused').forEach((s) => { s.hidden = S.playing; });
+    const r = cur(u);
+    document.querySelectorAll('.sc-gauge').forEach((gEl) => {
+      const k = gEl.dataset.gauge;
+      const alarm = (k === 'so2_mg' && scNum(r.so2_mg) > ESIK.SO2) || (k === 'nox_mg' && scNum(r.nox_mg) > ESIK.NOX);
+      gEl.classList.toggle('is-alarm', alarm);
+    });
+  };
+  const redrawLive = () => { dash.draw('canli'); dash.draw('canli-durum'); dash.draw('canli-trend'); dash.draw('alarm-kaydi'); };
+  const advance = (n) => {
+    const u = unitRows();
+    if (!u) return;
+    S.i = (S.i + n) % u.idx.length;
+    const r = cur(u);
+    const d = durumOf(r);
+    if (S.prev && d !== S.prev) {
+      S.log.unshift({ unite: S.unite, tarih: r.tarih, saat: r.saat, durum: d, so2: scNum(r.so2_mg), nox: scNum(r.nox_mg) });
+      S.log = S.log.slice(0, 50);
+    }
+    S.prev = d;
+    redrawLive();
+  };
+
+  document.querySelectorAll('.sc-play').forEach((b) => b.addEventListener('click', () => {
+    S.playing = !S.playing;
+    const u = unitRows();
+    if (u) syncControls(u);
+  }));
+  document.querySelectorAll('.sc-speed').forEach((s) => s.addEventListener('change', () => { S.speed = Number(s.value) || 4; }));
+  document.querySelectorAll('.sc-unite').forEach((s) => s.addEventListener('change', () => {
+    S.unite = s.value;
+    S.prev = null;
+    const keep = S.i;
+    S.cache = null;
+    const u = unitRows();
+    if (u) S.i = Math.min(keep, u.idx.length - 1);
+    redrawLive();
+  }));
+  document.querySelectorAll('.sc-pos').forEach((p) => p.addEventListener('input', () => {
+    const u = unitRows();
+    if (!u) return;
+    S.i = Math.round(Number(p.value) / 1000 * (u.idx.length - 1));
+    S.prev = null;
+    redrawLive();
+  }));
+
+  dash.draw('canli', (el) => {
+    const u = unitRows();
+    if (!u) return scFail(el, dash.data('olcumler'));
+    el.classList.remove('dash-skeleton');
+    const f = el.dataset.field;
+    el.dataset.row = String(u.idx[S.i]);
+    el.textContent = (liveFmt[f] || String)(cur(u)[f]);
+  });
+
+  dash.draw('canli-durum', (el) => {
+    const u = unitRows();
+    const box = el.parentElement;
+    if (!u || !box) return;
+    const d = durumOf(cur(u));
+    box.querySelectorAll('[data-durum]').forEach((p) => {
+      const r = cur(u);
+      const k = p.dataset.durum;
+      p.hidden = k === 'normal' ? d !== 'normal'
+        : k === 'durus' ? d !== 'durus'
+        : k === 'so2' ? !(scNum(r.so2_mg) > ESIK.SO2) : !(scNum(r.nox_mg) > ESIK.NOX);
+    });
+    syncControls(u);
+  });
+
+  dash.draw('alarm-kaydi', (ul) => {
+    ul.replaceChildren();
+    if (!unitRows()) return;
+    if (!S.log.length) {
+      const li = document.createElement('li');
+      li.textContent = 'Oynatma sırasında durum değişikliği henüz yok.';
+      ul.append(li);
+      return;
+    }
+    for (const e of S.log) {
+      const li = document.createElement('li');
+      const t = document.createElement('span');
+      t.className = 't';
+      t.textContent = `${e.tarih} ${String(e.saat).padStart(2, '0')}:00 · ${e.unite}`;
+      const m = document.createElement('span');
+      m.className = e.durum === 'normal' ? 'ok' : e.durum === 'durus' ? 'warn' : 'bad';
+      m.textContent = e.durum === 'so2' ? `SO₂ alarmı: ${scFmt(e.so2, 1)} mg/Nm³`
+        : e.durum === 'nox' ? `NOx alarmı: ${scFmt(e.nox, 1)} mg/Nm³`
+        : e.durum === 'durus' ? 'Ünite devre dışı' : 'Normale döndü';
+      li.append(t, m);
+      ul.append(li);
+    }
+  });
+
+  dash.draw('canli-trend', {
+    mount: () => {
+      let acc = 0, last = performance.now();
+      const timer = setInterval(() => {
+        const now = performance.now();
+        if (S.playing && !document.hidden && unitRows()) {
+          acc += (now - last) / 1000 * S.speed;
+          const n = Math.floor(acc);
+          acc -= n;
+          if (n > 0) advance(Math.min(n, 48));
+        }
+        last = now;
+      }, 125);
+      return { timer };
+    },
+    update: (el) => {
+      const u = unitRows();
+      if (!u) return scFail(el, dash.data('olcumler'), true);
+      el.classList.remove('dash-skeleton');
+      el.replaceChildren();
+      const lo = Math.max(0, S.i - 71);
+      const win = u.idx.slice(lo, S.i + 1).map((k, j) => {
+        const r = u.all[k];
+        return { j, so2: scNum(r.so2_mg), nox: scNum(r.nox_mg), yuk: scNum(r.yuk_mw) ?? 0 };
+      });
+      const W = Math.max(280, el.clientWidth || 500), H = 250, gap = 20;
+      const svg = d3.select(el).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('height', H);
+      const eMax = Math.max(ESIK.SO2 + 50, d3.max(win, (d) => Math.max(d.so2 ?? 0, d.nox ?? 0)));
+      const yE0 = d3.scaleLinear([0, eMax], [0, 1]).nice();
+      const yL0 = d3.scaleLinear([0, 650], [0, 1]).nice();
+      const tE = yE0.ticks(3), tL = yL0.ticks(3);
+      const m = { t: 8, r: 76, b: 8, l: scMeasure(svg, [...tE, ...tL].map((t) => scFmt(t, 0))) + 8 };
+      const hP = (H - m.t - m.b - gap) * 0.6, hL = (H - m.t - m.b - gap) * 0.4;
+      const x = d3.scaleLinear([0, 71], [m.l, W - m.r]);
+      const yE = d3.scaleLinear(yE0.domain(), [m.t + hP, m.t]);
+      const yL = d3.scaleLinear(yL0.domain(), [H - m.b, H - m.b - hL]);
+      const grid = (ys, ts) => {
+        svg.append('g').selectAll('line').data(ts).join('line')
+          .attr('x1', m.l).attr('x2', W - m.r).attr('y1', (t) => ys(t)).attr('y2', (t) => ys(t)).attr('stroke', 'var(--cds-chart-grid)');
+        svg.append('g').selectAll('text').data(ts).join('text')
+          .attr('x', m.l - 6).attr('y', (t) => ys(t)).attr('dy', '0.32em').attr('text-anchor', 'end')
+          .attr('font-size', 'var(--cds-font-size-caption)').attr('fill', 'var(--color-fg-muted)').text((t) => scFmt(t, 0));
+      };
+      grid(yE, tE); grid(yL, tL);
+      svg.append('line').attr('x1', m.l).attr('x2', W - m.r).attr('y1', yE(ESIK.SO2)).attr('y2', yE(ESIK.SO2))
+        .attr('stroke', 'var(--cds-chart-status-critical)').attr('stroke-width', 1.5).attr('stroke-dasharray', '5 4');
+      const e = win[win.length - 1];
+      const ends = [];
+      const series = [
+        ['so2', yE, dash.colors[0], 'SO₂', ESIK.SO2], ['nox', yE, dash.colors[1], 'NOx', ESIK.NOX], ['yuk', yL, dash.colors[2], 'MW', null],
+      ];
+      for (const [k, ys, c, label, lim] of series) {
+        svg.append('path').datum(win).attr('fill', 'none').attr('stroke', c).attr('stroke-width', 2)
+          .attr('stroke-linejoin', 'round').attr('stroke-linecap', 'round')
+          .attr('d', d3.line().defined((d) => d[k] != null).x((d) => x(d.j)).y((d) => ys(d[k])));
+        if (e[k] == null) continue;
+        const hot = lim != null && e[k] > lim;
+        svg.append('circle').attr('cx', x(e.j)).attr('cy', ys(e[k])).attr('r', 4)
+          .attr('fill', hot ? 'var(--cds-chart-status-critical)' : c).attr('stroke', 'var(--color-panel)').attr('stroke-width', 1.5);
+        ends.push({ y: ys(e[k]), text: `${label} ${scFmt(e[k], 0)}`, hot });
+      }
+      // uç etiketleri üst üste binmesin
+      ends.sort((a, b) => a.y - b.y);
+      for (let k = 1; k < ends.length; k++) if (ends[k].y - ends[k - 1].y < 14) ends[k].y = ends[k - 1].y + 14;
+      for (const l of ends) {
+        svg.append('text').attr('x', x(e.j) + 8).attr('y', l.y).attr('dy', '0.32em')
+          .attr('font-size', 'var(--cds-font-size-caption)').attr('fill', l.hot ? 'var(--color-bad)' : 'var(--color-fg)').text(l.text);
+      }
+    },
+    unmount: (el, made) => { if (made) clearInterval(made.timer); },
+  });
+</script>
+
+<script>
+  // Türkiye geneli (Ember aylık veri)
+  dash.calc('tr_son12', {
+    title: 'Son 12 ay ve önceki 12 ay',
+    description: 'Son yayımlanan 12 ayın toplamları ve önceki 12 ayla karşılaştırma: kömür üretimi, payı, kömür CO₂, kömürün CO₂ payı, şebeke CO₂ yoğunluğu.',
+    inputs: ['turkiye'],
+    fn: (turkiye) => {
+      const r = (v, d) => Math.round(v * 10 ** d) / 10 ** d;
+      const rows = [...turkiye].sort((a, b) => d3.ascending(a.ay, b.ay));
+      const son = rows.slice(-12), onceki = rows.slice(-24, -12);
+      const top = (s, k) => d3.sum(s, (o) => Number(o[k]) || 0);
+      const kSon = top(son, 'komur_twh'), kOnc = top(onceki, 'komur_twh');
+      return [{
+        donem: son[0].ay + ' – ' + son[son.length - 1].ay,
+        komur_twh: r(kSon, 1),
+        komur_pay: r(kSon / top(son, 'toplam_twh'), 4),
+        onceki_komur_pay: r(kOnc / top(onceki, 'toplam_twh'), 4),
+        komur_degisim: r(kSon / kOnc - 1, 4),
+        komur_co2_mt: r(top(son, 'komur_co2_mt'), 1),
+        co2_pay: r(top(son, 'komur_co2_mt') / top(son, 'toplam_co2_mt'), 4),
+        co2_yogunluk: r(top(son, 'toplam_co2_mt') / top(son, 'toplam_twh') * 1000, 0),
+        son_ay_yogunluk: r(Number(son[son.length - 1].co2_yogunluk), 0),
+      }];
+    },
+  });
+
+  dash.calc('tr_yillik', {
+    title: 'Türkiye yıllık özet',
+    description: 'Her yıl için toplam üretim, kömürden üretim ve payı, kömür CO₂, kömürün elektrik CO₂ içindeki payı ve şebeke CO₂ yoğunluğu.',
+    inputs: ['turkiye'],
+    fn: (turkiye) => {
+      const r = (v, d) => Math.round(v * 10 ** d) / 10 ** d;
+      const g = d3.group(turkiye, (o) => Number(String(o.ay).slice(0, 4)));
+      return [...g].sort((a, b) => a[0] - b[0]).map(([yil, s]) => {
+        const top = (k) => d3.sum(s, (o) => Number(o[k]) || 0);
+        return {
+          yil,
+          ay_sayisi: s.length,
+          toplam_twh: r(top('toplam_twh'), 1),
+          komur_twh: r(top('komur_twh'), 1),
+          komur_pay: r(top('komur_twh') / top('toplam_twh'), 4),
+          komur_co2_mt: r(top('komur_co2_mt'), 1),
+          co2_pay: r(top('komur_co2_mt') / top('toplam_co2_mt'), 4),
+          co2_yogunluk: r(top('toplam_co2_mt') / top('toplam_twh') * 1000, 0),
+        };
+      });
+    },
+  });
+
+  const trFmt = {
+    komur_twh: (v) => scFmt(v, 1), komur_co2_mt: (v) => scFmt(v, 1), co2_yogunluk: (v) => scFmt(v, 0),
+    son_ay_yogunluk: (v) => scFmt(v, 0), komur_pay: scPct, onceki_komur_pay: scPct, co2_pay: scPct,
+    komur_degisim: (v) => (v > 0 ? '+' : v < 0 ? '−' : '') + scPct(Math.abs(v)),
+  };
+  dash.draw('tr-kpi', (el) => {
+    const g = dash.data('tr_son12');
+    if (g.status !== 'ok' || !g.data.length) return scFail(el, g);
+    el.classList.remove('dash-skeleton');
+    const f = el.dataset.field, v = g.data[0][f];
+    el.textContent = (trFmt[f] || String)(v);
+    if (f === 'komur_degisim') { el.classList.toggle('is-up', v > 0); el.classList.toggle('is-down', v < 0); }
+  });
+  dash.draw('tr-donem', (el) => {
+    const g = dash.data('tr_son12');
+    if (g.status !== 'ok' || !g.data.length) return scFail(el, g);
+    el.classList.remove('dash-skeleton');
+    const ad = (ay) => AYLAR[Number(ay.slice(5, 7)) - 1] + ' ' + ay.slice(0, 4);
+    const [a, b] = String(g.data[0].donem).split(' – ');
+    el.textContent = ad(a) + ' – ' + ad(b);
+  });
+
+  window.TR_SERI = [
+    { k: 'komur', ad: 'Kömür', f: (o) => Number(o.komur_twh) || 0 },
+    { k: 'gaz', ad: 'Doğalgaz', f: (o) => Number(o.gaz_twh) || 0 },
+    { k: 'hidro', ad: 'Hidroelektrik', f: (o) => Number(o.hidro_twh) || 0 },
+    { k: 'ruzgar', ad: 'Rüzgâr', f: (o) => Number(o.ruzgar_twh) || 0 },
+    { k: 'gunes', ad: 'Güneş', f: (o) => Number(o.gunes_twh) || 0 },
+    { k: 'diger', ad: 'Diğer', f: (o) => ['biyo_twh', 'diger_yen_twh', 'diger_fosil_twh', 'nukleer_twh'].reduce((t, c) => t + (Number(o[c]) || 0), 0) },
+  ];
+  document.querySelectorAll('.sc-legend i[data-seri]').forEach((i) => {
+    const n = TR_SERI.findIndex((s) => s.k === i.dataset.seri);
+    if (n >= 0) i.style.background = dash.colors[n];
+  });
+
+  window.trAxisX = (svg, x, m, H, W) => {
+    const years = d3.utcYear.range(d3.utcYear.ceil(x.domain()[0]), x.domain()[1]);
+    const every = (W - m.l - m.r) / Math.max(1, years.length) < 40 ? 2 : 1;
+    svg.append('g').selectAll('line').data(years).join('line')
+      .attr('x1', (d) => x(d)).attr('x2', (d) => x(d)).attr('y1', H - m.b).attr('y2', H - m.b + 4).attr('stroke', 'var(--cds-chart-axis)');
+    svg.append('g').selectAll('text').data(years.filter((_, i) => i % every === 0)).join('text')
+      .attr('x', (d) => x(d)).attr('y', H - 6).attr('text-anchor', 'middle')
+      .attr('font-size', 'var(--cds-font-size-caption)').attr('fill', 'var(--color-fg-muted)').text((d) => d.getUTCFullYear());
+    svg.append('line').attr('x1', m.l).attr('x2', W - m.r).attr('y1', H - m.b).attr('y2', H - m.b).attr('stroke', 'var(--cds-chart-axis)');
+  };
+  window.trTip = (el, W, px, py, lines, head) => {
+    let tip = el.querySelector('.sc-tip');
+    if (!tip) { tip = document.createElement('div'); tip.className = 'sc-tip'; el.append(tip); }
+    tip.replaceChildren();
+    const h = document.createElement('div'); h.className = 'd'; h.textContent = head; tip.append(h);
+    for (const [c, t] of lines) {
+      const row = document.createElement('div');
+      if (c) { const sw = document.createElement('span'); sw.className = 'sw'; sw.style.background = c; row.append(sw); }
+      row.append(document.createTextNode(t));
+      tip.append(row);
+    }
+    tip.style.visibility = 'visible';
+    const sx = el.clientWidth / W, tw = tip.offsetWidth;
+    let left = px * sx + 12;
+    if (left + tw > el.clientWidth) left = px * sx - tw - 12;
+    tip.style.left = Math.max(0, left) + 'px';
+    tip.style.top = Math.max(0, py * sx) + 'px';
+  };
+  window.trRows = () => {
+    const g = dash.data('turkiye');
+    if (g.status !== 'ok' || !g.data.length) return [null, g];
+    return [[...g.data].sort((a, b) => d3.ascending(a.ay, b.ay)).map((o) => ({ ...o, t: new Date(o.ay + '-01T00:00:00Z') })), g];
+  };
+  window.ayAdi = (t) => AYLAR[t.getUTCMonth()] + ' ' + t.getUTCFullYear();
+
+  dash.draw('tr-karisim', (el) => {
+    const [rows, g] = trRows();
+    if (!rows) return scFail(el, g, true);
+    el.classList.remove('dash-skeleton');
+    el.replaceChildren();
+    const W = Math.max(280, el.clientWidth || 700), H = 300;
+    const svg = d3.select(el).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('height', H);
+    const st = d3.stack().keys(TR_SERI.map((s) => s.k)).value((o, k) => TR_SERI.find((s) => s.k === k).f(o))(rows);
+    const y0 = d3.scaleLinear([0, d3.max(st[st.length - 1], (d) => d[1])], [0, 1]).nice();
+    const ticks = y0.ticks(5);
+    const m = { t: 10, r: 10, b: 24, l: scMeasure(svg, ticks.map((t) => scFmt(t, 0))) + 8 };
+    const x = d3.scaleUtc(d3.extent(rows, (d) => d.t), [m.l, W - m.r]);
+    const y = d3.scaleLinear(y0.domain(), [H - m.b, m.t]);
+    svg.append('g').selectAll('line').data(ticks).join('line')
+      .attr('x1', m.l).attr('x2', W - m.r).attr('y1', (t) => y(t)).attr('y2', (t) => y(t)).attr('stroke', 'var(--cds-chart-grid)');
+    svg.append('g').selectAll('text').data(ticks).join('text')
+      .attr('x', m.l - 6).attr('y', (t) => y(t)).attr('dy', '0.32em').attr('text-anchor', 'end')
+      .attr('font-size', 'var(--cds-font-size-caption)').attr('fill', 'var(--color-fg-muted)').text((t) => scFmt(t, 0));
+    const area = d3.area().x((d) => x(d.data.t)).y0((d) => y(d[0])).y1((d) => y(d[1]));
+    svg.append('g').selectAll('path').data(st).join('path').attr('d', area)
+      .attr('fill', (_, i) => dash.colors[i]).attr('fill-opacity', (_, i) => (i === 0 ? 0.95 : 0.6))
+      .attr('stroke', 'var(--color-panel)').attr('stroke-width', 0.5);
+    trAxisX(svg, x, m, H, W);
+    const rule = svg.append('line').attr('y1', m.t).attr('y2', H - m.b).attr('stroke', 'var(--cds-chart-axis)').attr('visibility', 'hidden');
+    const bis = d3.bisector((d) => d.t).center;
+    svg.append('rect').attr('x', m.l).attr('y', m.t).attr('width', W - m.l - m.r).attr('height', H - m.t - m.b).attr('fill', 'transparent')
+      .on('pointermove', (ev) => {
+        const [px] = d3.pointer(ev);
+        const o = rows[bis(rows, x.invert(px))];
+        rule.attr('x1', x(o.t)).attr('x2', x(o.t)).attr('visibility', 'visible');
+        const lines = TR_SERI.map((s, i) => [dash.colors[i], `${s.ad}: ${scFmt(s.f(o), 2)} TWh`]).reverse();
+        lines.push([null, `Toplam: ${scFmt(Number(o.toplam_twh), 2)} TWh · kömür payı %${scFmt(Number(o.komur_pay), 1)}`]);
+        trTip(el, W, x(o.t), m.t, lines, ayAdi(o.t));
+      })
+      .on('pointerleave', () => { rule.attr('visibility', 'hidden'); const t = el.querySelector('.sc-tip'); if (t) t.style.visibility = 'hidden'; });
+  });
+
+  window.trLine = (el, field, opts) => {
+    const [rows, g] = trRows();
+    if (!rows) return scFail(el, g, true);
+    el.classList.remove('dash-skeleton');
+    el.replaceChildren();
+    const W = Math.max(280, el.clientWidth || 600), H = 220;
+    const svg = d3.select(el).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('height', H);
+    const v = (o) => Number(o[field]);
+    const y0 = d3.scaleLinear([0, d3.max(rows, v)], [0, 1]).nice();
+    const ticks = y0.ticks(5);
+    const fmtT = (t) => (opts.pct ? '%' : '') + scFmt(t, 0);
+    const last = rows[rows.length - 1];
+    const endLabel = (opts.pct ? '%' : '') + scFmt(v(last), 1);
+    const m = { t: 10, r: scMeasure(svg, [endLabel]) + 14, b: 24, l: scMeasure(svg, ticks.map(fmtT)) + 8 };
+    const x = d3.scaleUtc(d3.extent(rows, (d) => d.t), [m.l, W - m.r]);
+    const y = d3.scaleLinear(y0.domain(), [H - m.b, m.t]);
+    svg.append('g').selectAll('line').data(ticks).join('line')
+      .attr('x1', m.l).attr('x2', W - m.r).attr('y1', (t) => y(t)).attr('y2', (t) => y(t)).attr('stroke', 'var(--cds-chart-grid)');
+    svg.append('g').selectAll('text').data(ticks).join('text')
+      .attr('x', m.l - 6).attr('y', (t) => y(t)).attr('dy', '0.32em').attr('text-anchor', 'end')
+      .attr('font-size', 'var(--cds-font-size-caption)').attr('fill', 'var(--color-fg-muted)').text(fmtT);
+    trAxisX(svg, x, m, H, W);
+    svg.append('path').datum(rows).attr('fill', 'none').attr('stroke', dash.colors[0]).attr('stroke-width', 2)
+      .attr('stroke-linejoin', 'round').attr('stroke-linecap', 'round').attr('d', d3.line().x((d) => x(d.t)).y((d) => y(v(d))));
+    svg.append('circle').attr('cx', x(last.t)).attr('cy', y(v(last))).attr('r', 3.5).attr('fill', dash.colors[0]);
+    svg.append('text').attr('x', x(last.t) + 6).attr('y', y(v(last))).attr('dy', '0.32em')
+      .attr('font-size', 'var(--cds-font-size-caption)').attr('fill', 'var(--color-fg)').text(endLabel);
+    const dot = svg.append('circle').attr('r', 3.5).attr('fill', dash.colors[0]).attr('stroke', 'var(--color-panel)').attr('stroke-width', 1.5).attr('visibility', 'hidden');
+    const bis = d3.bisector((d) => d.t).center;
+    svg.append('rect').attr('x', m.l).attr('y', m.t).attr('width', W - m.l - m.r).attr('height', H - m.t - m.b).attr('fill', 'transparent')
+      .on('pointermove', (ev) => {
+        const [px] = d3.pointer(ev);
+        const o = rows[bis(rows, x.invert(px))];
+        dot.attr('cx', x(o.t)).attr('cy', y(v(o))).attr('visibility', 'visible');
+        trTip(el, W, x(o.t), Math.max(0, y(v(o)) - 44), [[null, opts.label(v(o))]], ayAdi(o.t));
+      })
+      .on('pointerleave', () => { dot.attr('visibility', 'hidden'); const t = el.querySelector('.sc-tip'); if (t) t.style.visibility = 'hidden'; });
+  };
+  dash.draw('tr-pay', (el) => trLine(el, 'komur_pay', { pct: true, label: (v) => `Kömür payı: %${scFmt(v, 1)}` }));
+  dash.draw('tr-co2', (el) => trLine(el, 'komur_co2_mt', { label: (v) => `Kömür CO₂: ${scFmt(v, 2)} milyon ton` }));
+
+  dash.draw('tr-yillik-govde', (tb) => {
+    const g = dash.data('tr_yillik');
+    tb.replaceChildren();
+    if (g.status !== 'ok') return;
+    const cols = [
+      ['yil', String], ['ay_sayisi', String], ['toplam_twh', (v) => scFmt(v, 1)], ['komur_twh', (v) => scFmt(v, 1)],
+      ['komur_pay', scPct], ['komur_co2_mt', (v) => scFmt(v, 1)], ['co2_pay', scPct], ['co2_yogunluk', (v) => scFmt(v, 0)],
+    ];
+    for (const d of g.data) {
+      const tr = document.createElement('tr');
+      tr.dataset.key = String(d.yil);
+      for (const [c, f] of cols) {
+        const td = document.createElement('td');
+        td.textContent = f(d[c]);
+        tr.append(td);
+      }
+      tb.append(tr);
+    }
+  });
+</script>
+
+<script>
+  // Türkiye kömür santralleri (EPİAŞ saatlik üretim)
+  // CO₂ varsayımları: IPCC 2006 emisyon faktörü (t CO₂/TJ) ve santral verimi
+  window.TS_CO2 = { 'Linyit': { ef: 101, eta: 0.33 }, 'İthal kömür': { ef: 94.6, eta: 0.38 } };
+  window.TS_DUSUK = 0.4; // en yüksek üretimin bu oranının altı "düşük yük"
+  window.tsTmwh = (y) => TS_CO2[y].ef * 0.0036 / TS_CO2[y].eta;
+
+  dash.calc('saatlik_co2', {
+    title: 'Saatlik hesaplanmış CO₂',
+    description: 'Her santralin saatlik üretimi (MWh) × yakıtına göre CO₂ faktörü: linyit 101 t/TJ ve %33 verim (1,102 t/MWh), ithal kömür 94,6 t/TJ ve %38 verim (0,896 t/MWh).',
+    inputs: ['epias_saatlik', 'santraller'],
+    fn: (epias_saatlik, santraller) => {
+      const f = { 'Linyit': 101 * 0.0036 / 0.33, 'İthal kömür': 94.6 * 0.0036 / 0.38 };
+      const k = santraller.map((s) => [s.anahtar, f[s.yakit]]);
+      return epias_saatlik.map((o) => {
+        const r = { tarih: o.tarih, saat: o.saat };
+        for (const [a, c] of k) r[a] = o[a] === '' || o[a] == null ? null : Math.round(Number(o[a]) * c * 10) / 10;
+        return r;
+      });
+    },
+  });
+
+  dash.calc('filo', {
+    title: 'Santral karşılaştırması',
+    description: 'Her santral için 2025 üretimi, üretim yapılan saat, en yüksek ve ortalama saatlik üretim, kullanım oranı (üretim ÷ en yüksek × verili saat) ve hesaplanmış CO₂ (linyit 1,102, ithal kömür 0,896 t/MWh).',
+    inputs: ['epias_saatlik', 'santraller'],
+    fn: (epias_saatlik, santraller) => {
+      const f = { 'Linyit': 101 * 0.0036 / 0.33, 'İthal kömür': 94.6 * 0.0036 / 0.38 };
+      const r = (v, d) => Math.round(v * 10 ** d) / 10 ** d;
+      return santraller.map((s) => {
+        let mwh = 0, cal = 0, veri = 0, maks = 0;
+        for (const o of epias_saatlik) {
+          if (o[s.anahtar] === '' || o[s.anahtar] == null) continue;
+          const v = Number(o[s.anahtar]);
+          veri++; mwh += v; if (v > 0) cal++; if (v > maks) maks = v;
+        }
+        return {
+          anahtar: s.anahtar, santral: s.santral, il: s.il, yakit: s.yakit,
+          uretim_gwh: r(mwh / 1000, 1),
+          calisma_saat: cal,
+          maks_mw: r(maks, 0),
+          ort_yuk: cal ? r(mwh / cal, 0) : 0,
+          kullanim: maks && veri ? r(mwh / (maks * veri), 4) : 0,
+          co2_kt: r(mwh * f[s.yakit] / 1000, 0),
+        };
+      }).sort((a, b) => b.uretim_gwh - a.uretim_gwh);
+    },
+  });
+
+  dash.calc('filo_ozet', {
+    title: '15 santralin toplamı',
+    description: 'Santral karşılaştırmasındaki üretim ve hesaplanmış CO₂ toplamları; linyit ve ithal kömür ayrımı.',
+    inputs: ['filo'],
+    fn: (filo) => {
+      const r = (v, d) => Math.round(v * 10 ** d) / 10 ** d;
+      const top = d3.sum(filo, (s) => s.uretim_gwh);
+      const ithal = d3.sum(filo.filter((s) => s.yakit === 'İthal kömür'), (s) => s.uretim_gwh);
+      return [{
+        uretim_gwh: r(top, 0),
+        linyit_gwh: r(top - ithal, 0),
+        ithal_gwh: r(ithal, 0),
+        ithal_pay: r(ithal / top, 4),
+        co2_mt: r(d3.sum(filo, (s) => s.co2_kt) / 1000, 1),
+      }];
+    },
+  });
+
+  dash.calc('gunluk_santral', {
+    title: 'Günlük üretim',
+    description: 'Her gün için santral başına toplam üretim (GWh), ayrıca linyit ve ithal kömür santrallerinin toplamı. Yayımlanmamış saatler toplama girmez.',
+    inputs: ['epias_saatlik', 'santraller'],
+    fn: (epias_saatlik, santraller) => {
+      const r = (v) => Math.round(v * 1000) / 1000;
+      const g = d3.group(epias_saatlik, (o) => o.tarih);
+      return [...g].sort((a, b) => d3.ascending(a[0], b[0])).map(([tarih, s]) => {
+        const row = { tarih, linyit: 0, ithal: 0 };
+        for (const p of santraller) {
+          const v = d3.sum(s, (o) => (o[p.anahtar] === '' || o[p.anahtar] == null ? 0 : Number(o[p.anahtar]))) / 1000;
+          row[p.anahtar] = r(v);
+          if (p.yakit === 'İthal kömür') row.ithal += v; else row.linyit += v;
+        }
+        row.linyit = r(row.linyit);
+        row.ithal = r(row.ithal);
+        return row;
+      });
+    },
+  });
+
+  const tsOzetFmt = { uretim_gwh: (v) => scFmt(v, 0), linyit_gwh: (v) => scFmt(v, 0), ithal_gwh: (v) => scFmt(v, 0), ithal_pay: scPct, co2_mt: (v) => scFmt(v, 1) };
+  dash.draw('ts-ozet', (el) => {
+    const g = dash.data('filo_ozet');
+    if (g.status !== 'ok' || !g.data.length) return scFail(el, g);
+    el.classList.remove('dash-skeleton');
+    el.textContent = (tsOzetFmt[el.dataset.field] || String)(g.data[0][el.dataset.field]);
+  });
+  dash.draw('ts-esik', (el) => { el.textContent = scFmt(TS_DUSUK * 100, 0); });
+  dash.draw('ts-sabit', (el) => {
+    const v = {
+      lin_ef: scFmt(TS_CO2['Linyit'].ef, 0), ith_ef: scFmt(TS_CO2['İthal kömür'].ef, 1),
+      lin_eta: scFmt(TS_CO2['Linyit'].eta * 100, 0), ith_eta: scFmt(TS_CO2['İthal kömür'].eta * 100, 0),
+      lin_tmwh: scFmt(tsTmwh('Linyit'), 2), ith_tmwh: scFmt(tsTmwh('İthal kömür'), 2),
+    };
+    el.textContent = v[el.dataset.k] ?? '—';
+  });
+  document.querySelectorAll('.sc-legend i[data-tseri]').forEach((i) => { i.style.background = dash.colors[Number(i.dataset.tseri)]; });
+
+  // Canlı izleme durumu
+  window.TS = window.TS || { key: 'afsin_a', i: null, playing: true, speed: 4, log: [], prev: null };
+  const T = window.TS;
+  const tsRows = () => {
+    const g = dash.data('epias_saatlik');
+    return g.status === 'ok' && g.data.length ? g.data : null;
+  };
+  const tsFilo = () => {
+    const g = dash.data('filo');
+    return g.status === 'ok' ? g.data.find((s) => s.anahtar === T.key) : null;
+  };
+  const tsStart = (rows) => {
+    if (T.i == null || T.i >= rows.length) {
+      const k = rows.findIndex((r, j) => j > 0 && Number(r[T.key]) === 0 && Number(rows[j - 1][T.key]) > 0);
+      T.i = k > 30 ? k - 30 : 0;
+    }
+  };
+  const tsDurum = (r, maks) => {
+    const v = r[T.key];
+    if (v === '' || v == null) return 'veriyok';
+    if (Number(v) <= 0) return 'durdu';
+    if (maks && Number(v) < maks * TS_DUSUK) return 'dusuk';
+    return 'calisiyor';
+  };
+  const tsSync = (rows) => {
+    document.querySelectorAll('.ts-pos').forEach((p) => { if (p !== document.activeElement) p.value = String(Math.round(T.i / Math.max(1, rows.length - 1) * 1000)); });
+    document.querySelectorAll('.ts-santral').forEach((s) => { if (s !== document.activeElement) s.value = T.key; });
+    document.querySelectorAll('.ts-play').forEach((b) => b.setAttribute('aria-pressed', String(T.playing)));
+    document.querySelectorAll('.ts-when-playing').forEach((s) => { s.hidden = !T.playing; });
+    document.querySelectorAll('.ts-when-paused').forEach((s) => { s.hidden = T.playing; });
+    const f = tsFilo();
+    const d = tsDurum(rows[T.i], f && f.maks_mw);
+    document.querySelectorAll('[data-tgauge="uretim"]').forEach((g) => g.classList.toggle('is-alarm', d === 'durdu'));
+    document.querySelectorAll('.ts-filo tbody tr').forEach((tr) => tr.classList.toggle('is-picked', tr.dataset.anahtar === T.key));
+  };
+  const tsRedraw = () => {
+    ['ts-canli', 'ts-canli-co2', 'ts-durum', 'ts-trend', 'ts-kayit'].forEach((n) => dash.draw(n));
+  };
+  const tsSelect = (key) => {
+    T.key = key; T.prev = null;
+    ['ts-filo-deger', 'ts-gunluk'].forEach((n) => dash.draw(n));
+    tsRedraw();
+  };
+  const tsAdvance = (n) => {
+    const rows = tsRows();
+    if (!rows) return;
+    tsStart(rows);
+    T.i = (T.i + n) % rows.length;
+    const f = tsFilo();
+    const r = rows[T.i];
+    const d = tsDurum(r, f && f.maks_mw);
+    if (T.prev && d !== T.prev) {
+      T.log.unshift({ ad: f ? f.santral : T.key, tarih: r.tarih, saat: r.saat, durum: d, v: r[T.key] });
+      T.log = T.log.slice(0, 60);
+    }
+    T.prev = d;
+    tsRedraw();
+  };
+
+  document.querySelectorAll('.ts-play').forEach((b) => b.addEventListener('click', () => {
+    T.playing = !T.playing;
+    const rows = tsRows();
+    if (rows) tsSync(rows);
+  }));
+  document.querySelectorAll('.ts-speed').forEach((s) => s.addEventListener('change', () => { T.speed = Number(s.value) || 4; }));
+  document.querySelectorAll('.ts-santral').forEach((s) => s.addEventListener('change', () => tsSelect(s.value)));
+  document.querySelectorAll('.ts-pos').forEach((p) => p.addEventListener('input', () => {
+    const rows = tsRows();
+    if (!rows) return;
+    T.i = Math.round(Number(p.value) / 1000 * (rows.length - 1));
+    T.prev = null;
+    tsRedraw();
+  }));
+  document.querySelectorAll('.ts-filo').forEach((t) => t.addEventListener('click', (ev) => {
+    const tr = ev.target.closest('tr[data-anahtar]');
+    if (!tr) return;
+    tsSelect(tr.dataset.anahtar);
+    const c = document.getElementById('ts-canli');
+    if (c) c.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }));
+
+  const tsLiveFmt = { tarih: String, saat: (v) => String(v).padStart(2, '0') };
+  dash.draw('ts-canli', (el) => {
+    const rows = tsRows();
+    if (!rows) return scFail(el, dash.data('epias_saatlik'));
+    tsStart(rows);
+    el.classList.remove('dash-skeleton');
+    if (el.dataset.tcol) el.dataset.field = T.key;
+    el.dataset.row = String(T.i);
+    const f = el.dataset.field, v = rows[T.i][f];
+    el.textContent = tsLiveFmt[f] ? tsLiveFmt[f](v) : (v === '' || v == null ? '—' : scFmt(Number(v), 0));
+  });
+
+  dash.draw('ts-canli-co2', (el) => {
+    const g = dash.data('saatlik_co2');
+    if (g.status !== 'ok' || !g.data.length || T.i == null) return scFail(el, g);
+    el.classList.remove('dash-skeleton');
+    el.dataset.field = T.key;
+    el.dataset.row = String(T.i);
+    const v = g.data[T.i] && g.data[T.i][T.key];
+    el.textContent = v == null ? '—' : scFmt(v, 0);
+  });
+
+  const tsFiloFmt = { maks_mw: (v) => scFmt(v, 0), uretim_gwh: (v) => scFmt(v, 1), kullanim: scPct, yakit: String, il: String };
+  dash.draw('ts-filo-deger', (el) => {
+    const g = dash.data('filo');
+    if (g.status !== 'ok') return scFail(el, g);
+    const s = g.data.find((x) => x.anahtar === T.key);
+    if (!s) return scFail(el, g);
+    el.classList.remove('dash-skeleton');
+    el.dataset.where = 'anahtar=' + encodeURIComponent(T.key);
+    el.textContent = (tsFiloFmt[el.dataset.field] || String)(s[el.dataset.field]);
+  });
+
+  dash.draw('ts-durum', (el) => {
+    const rows = tsRows();
+    const box = el.parentElement;
+    if (!rows || !box) return;
+    tsStart(rows);
+    const f = tsFilo();
+    const d = tsDurum(rows[T.i], f && f.maks_mw);
+    box.querySelectorAll('[data-tdurum]').forEach((p) => { p.hidden = p.dataset.tdurum !== d; });
+    tsSync(rows);
+  });
+
+  dash.draw('ts-kayit', (ul) => {
+    ul.replaceChildren();
+    if (!tsRows()) return;
+    if (!T.log.length) {
+      const li = document.createElement('li');
+      li.textContent = 'Oynatma sırasında durum değişikliği henüz yok.';
+      ul.append(li);
+      return;
+    }
+    for (const e of T.log) {
+      const li = document.createElement('li');
+      const t = document.createElement('span');
+      t.className = 't';
+      t.textContent = `${e.tarih} ${String(e.saat).padStart(2, '0')}:00 · ${e.ad}`;
+      const m = document.createElement('span');
+      m.className = e.durum === 'calisiyor' ? 'ok' : e.durum === 'durdu' ? 'bad' : 'warn';
+      m.textContent = e.durum === 'durdu' ? 'Santral durdu (0 MW)'
+        : e.durum === 'dusuk' ? `Düşük yüke indi: ${scFmt(Number(e.v), 0)} MW`
+        : e.durum === 'veriyok' ? 'Veri gelmedi' : `Normal çalışmaya döndü: ${scFmt(Number(e.v), 0)} MW`;
+      li.append(t, m);
+      ul.append(li);
+    }
+  });
+
+  dash.draw('ts-trend', {
+    mount: () => {
+      let acc = 0, last = performance.now();
+      const timer = setInterval(() => {
+        const now = performance.now();
+        if (T.playing && !document.hidden && tsRows() && window.SC_TAB === 'santral') {
+          acc += (now - last) / 1000 * T.speed;
+          const n = Math.floor(acc);
+          acc -= n;
+          if (n > 0) tsAdvance(Math.min(n, 48));
+        }
+        last = now;
+      }, 125);
+      return { timer };
+    },
+    update: (el) => {
+      const rows = tsRows();
+      if (!rows) return scFail(el, dash.data('epias_saatlik'), true);
+      tsStart(rows);
+      el.classList.remove('dash-skeleton');
+      el.replaceChildren();
+      const f = tsFilo();
+      const maks = f ? f.maks_mw : d3.max(rows, (r) => Number(r[T.key]) || 0);
+      const lo = Math.max(0, T.i - 71);
+      const win = rows.slice(lo, T.i + 1).map((r, j) => ({ j, v: r[T.key] === '' || r[T.key] == null ? null : Number(r[T.key]) }));
+      const W = Math.max(280, el.clientWidth || 500), H = 250;
+      const svg = d3.select(el).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('height', H);
+      const y0 = d3.scaleLinear([0, Math.max(maks, 1)], [0, 1]).nice();
+      const ticks = y0.ticks(4);
+      const e = win[win.length - 1];
+      const endText = e.v == null ? 'veri yok' : `${scFmt(e.v, 0)} MW`;
+      const m = { t: 8, r: scMeasure(svg, [endText]) + 14, b: 8, l: scMeasure(svg, ticks.map((t) => scFmt(t, 0))) + 8 };
+      const x = d3.scaleLinear([0, 71], [m.l, W - m.r]);
+      const y = d3.scaleLinear(y0.domain(), [H - m.b, m.t]);
+      svg.append('g').selectAll('line').data(ticks).join('line')
+        .attr('x1', m.l).attr('x2', W - m.r).attr('y1', (t) => y(t)).attr('y2', (t) => y(t)).attr('stroke', 'var(--cds-chart-grid)');
+      svg.append('g').selectAll('text').data(ticks).join('text')
+        .attr('x', m.l - 6).attr('y', (t) => y(t)).attr('dy', '0.32em').attr('text-anchor', 'end')
+        .attr('font-size', 'var(--cds-font-size-caption)').attr('fill', 'var(--color-fg-muted)').text((t) => scFmt(t, 0));
+      svg.append('line').attr('x1', m.l).attr('x2', W - m.r).attr('y1', y(maks * TS_DUSUK)).attr('y2', y(maks * TS_DUSUK))
+        .attr('stroke', 'var(--color-warn)').attr('stroke-width', 1.5).attr('stroke-dasharray', '5 4');
+      const grad = 'tsg' + Math.random().toString(36).slice(2, 8);
+      const lg = svg.append('defs').append('linearGradient').attr('id', grad).attr('x1', 0).attr('x2', 0).attr('y1', 0).attr('y2', 1);
+      [[0, .26], [.25, .16], [.5, .08], [.75, .03], [1, 0]].forEach(([o, a]) => lg.append('stop').attr('offset', o).attr('style', `stop-color:${dash.colors[0]};stop-opacity:${a}`));
+      const def = (d) => d.v != null;
+      svg.append('path').datum(win).attr('fill', `url(#${grad})`)
+        .attr('d', d3.area().defined(def).x((d) => x(d.j)).y0(y(0)).y1((d) => y(d.v)));
+      svg.append('path').datum(win).attr('fill', 'none').attr('stroke', dash.colors[0]).attr('stroke-width', 2)
+        .attr('stroke-linejoin', 'round').attr('stroke-linecap', 'round')
+        .attr('d', d3.line().defined(def).x((d) => x(d.j)).y((d) => y(d.v)));
+      if (e.v != null) {
+        const hot = e.v <= 0;
+        svg.append('circle').attr('cx', x(e.j)).attr('cy', y(e.v)).attr('r', 4)
+          .attr('fill', hot ? 'var(--cds-chart-status-critical)' : dash.colors[0]).attr('stroke', 'var(--color-panel)').attr('stroke-width', 1.5);
+      }
+      svg.append('text').attr('x', x(e.j) + 8).attr('y', e.v == null ? y(0) : y(e.v)).attr('dy', '0.32em')
+        .attr('font-size', 'var(--cds-font-size-caption)').attr('fill', 'var(--color-fg)').text(endText);
+    },
+    unmount: (el, made) => { if (made) clearInterval(made.timer); },
+  });
+
+  // Günlük grafikler
+  const tsDaily = (el, series) => {
+    const g = dash.data('gunluk_santral');
+    if (g.status !== 'ok' || !g.data.length) return scFail(el, g, true);
+    el.classList.remove('dash-skeleton');
+    el.replaceChildren();
+    const rows = g.data.map((d) => ({ ...d, t: new Date(d.tarih + 'T00:00:00Z') }));
+    const W = Math.max(280, el.clientWidth || 600), H = 220;
+    const svg = d3.select(el).append('svg').attr('width', '100%').attr('viewBox', `0 0 ${W} ${H}`).attr('height', H);
+    const y0 = d3.scaleLinear([0, d3.max(series, (s) => d3.max(rows, (d) => d[s.k])) || 1], [0, 1]).nice();
+    const ticks = y0.ticks(5);
+    const dec = y0.domain()[1] < 5 ? 1 : 0;
+    const m = { t: 10, r: 10, b: 24, l: scMeasure(svg, ticks.map((t) => scFmt(t, dec))) + 8 };
+    const x = d3.scaleUtc(d3.extent(rows, (d) => d.t), [m.l, W - m.r]);
+    const y = d3.scaleLinear(y0.domain(), [H - m.b, m.t]);
+    svg.append('g').selectAll('line').data(ticks).join('line')
+      .attr('x1', m.l).attr('x2', W - m.r).attr('y1', (t) => y(t)).attr('y2', (t) => y(t)).attr('stroke', 'var(--cds-chart-grid)');
+    svg.append('g').selectAll('text').data(ticks).join('text')
+      .attr('x', m.l - 6).attr('y', (t) => y(t)).attr('dy', '0.32em').attr('text-anchor', 'end')
+      .attr('font-size', 'var(--cds-font-size-caption)').attr('fill', 'var(--color-fg-muted)').text((t) => scFmt(t, dec));
+    const months = d3.utcMonth.range(d3.utcMonth.ceil(x.domain()[0]), x.domain()[1]);
+    const every = (W - m.l - m.r) / 12 < 34 ? 3 : (W - m.l - m.r) / 12 < 44 ? 2 : 1;
+    svg.append('g').selectAll('text').data(months.filter((_, i) => i % every === 0)).join('text')
+      .attr('x', (d) => x(d)).attr('y', H - 6).attr('font-size', 'var(--cds-font-size-caption)').attr('fill', 'var(--color-fg-muted)')
+      .text((d) => AYLAR[d.getUTCMonth()].slice(0, 3));
+    svg.append('line').attr('x1', m.l).attr('x2', W - m.r).attr('y1', H - m.b).attr('y2', H - m.b).attr('stroke', 'var(--cds-chart-axis)');
+    series.forEach((s) => {
+      svg.append('path').datum(rows).attr('fill', 'none').attr('stroke', s.c).attr('stroke-width', 1.5)
+        .attr('stroke-linejoin', 'round').attr('stroke-linecap', 'round').attr('d', d3.line().x((d) => x(d.t)).y((d) => y(d[s.k])));
+    });
+    const rule = svg.append('line').attr('y1', m.t).attr('y2', H - m.b).attr('stroke', 'var(--cds-chart-axis)').attr('visibility', 'hidden');
+    const bis = d3.bisector((d) => d.t).center;
+    svg.append('rect').attr('x', m.l).attr('y', m.t).attr('width', W - m.l - m.r).attr('height', H - m.t - m.b).attr('fill', 'transparent')
+      .on('pointermove', (ev) => {
+        const [px] = d3.pointer(ev);
+        const o = rows[bis(rows, x.invert(px))];
+        rule.attr('x1', x(o.t)).attr('x2', x(o.t)).attr('visibility', 'visible');
+        trTip(el, W, x(o.t), m.t, series.map((s) => [series.length > 1 ? s.c : null, `${s.ad}: ${scFmt(o[s.k], 2)} GWh`]),
+          `${o.t.getUTCDate()} ${AYLAR[o.t.getUTCMonth()]} 2025`);
+      })
+      .on('pointerleave', () => { rule.attr('visibility', 'hidden'); const t = el.querySelector('.sc-tip'); if (t) t.style.visibility = 'hidden'; });
+  };
+  dash.draw('ts-gunluk', (el) => {
+    const f = tsFilo();
+    tsDaily(el, [{ k: T.key, c: dash.colors[0], ad: f ? f.santral : 'Üretim' }]);
+  });
+  dash.draw('ts-yakit', (el) => tsDaily(el, [
+    { k: 'linyit', c: dash.colors[0], ad: 'Linyit santralleri' },
+    { k: 'ithal', c: dash.colors[1], ad: 'İthal kömür santralleri' },
+  ]));
+
+  dash.draw('ts-filo-govde', (tb) => {
+    const g = dash.data('filo');
+    tb.replaceChildren();
+    if (g.status !== 'ok') return;
+    const maxG = d3.max(g.data, (d) => d.uretim_gwh) || 1;
+    const cols = [
+      ['santral', String], ['il', String], ['yakit', String], ['uretim_gwh', (v) => scFmt(v, 1)],
+      ['calisma_saat', (v) => scFmt(v, 0)], ['maks_mw', (v) => scFmt(v, 0)], ['ort_yuk', (v) => scFmt(v, 0)],
+      ['kullanim', scPct], ['co2_kt', (v) => scFmt(v, 0)],
+    ];
+    for (const d of g.data) {
+      const tr = document.createElement('tr');
+      tr.dataset.anahtar = d.anahtar;
+      tr.classList.toggle('is-picked', d.anahtar === T.key);
+      for (const [c, f] of cols) {
+        const td = document.createElement('td');
+        td.textContent = f(d[c]);
+        if (c === 'uretim_gwh') {
+          td.className = 'ts-barcell';
+          td.style.setProperty('--w', (d.uretim_gwh / maxG * 100).toFixed(1) + '%');
+        }
+        if (c === 'kullanim' && d.kullanim < 0.3) td.className = 'is-bad';
+        tr.append(td);
+      }
+      tb.append(tr);
+    }
+  });
+</script>
+
+<script>
+  // Sekmeler
+  const sekmeIds = {
+    santral: ['santral', 'ts-canli', 'ts-filo-tablo', 'ts-gunluk-kart', 'ts-yakit-kart'],
+    emisyon: ['emisyon', 'canli', 'ozet', 'aylik-tablo', 'trendler'],
+  };
+  if (!window.SC_TAB) {
+    const h = location.hash.slice(1);
+    window.SC_TAB = Object.keys(sekmeIds).find((k) => sekmeIds[k].includes(h)) || 'turkiye';
+  }
+  const applyTab = () => {
+    document.querySelectorAll('[data-page]').forEach((p) => { p.hidden = p.dataset.page !== window.SC_TAB; });
+    document.querySelectorAll('.sc-tab').forEach((b) => b.setAttribute('aria-selected', String(b.dataset.tab === window.SC_TAB)));
+  };
+  document.querySelectorAll('.sc-tab').forEach((b) => b.addEventListener('click', () => {
+    window.SC_TAB = b.dataset.tab;
+    applyTab();
+    dash.setLink(window.SC_TAB);
+  }));
+  applyTab();
+  dash.onData(applyTab);
+</script>
+<p class="site-alt">Veri kaynakları: EPİAŞ Şeffaflık Platformu (santral bazında saatlik üretim, 2025), Ember Monthly Electricity Data (CC BY 4.0), ABD EPA Clean Air Markets Program Data (2024). Ham veriler <a href="veri/">veri/</a> klasöründedir.</p>
+</div>
+</body>
+</html>
